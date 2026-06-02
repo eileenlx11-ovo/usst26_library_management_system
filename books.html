@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>图书管理 - 管理员</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>📚 图书馆管理系统</h2>
+        <div class="user-panel">
+            <div class="avatar" id="sidebarAvatar">?</div>
+            <div class="user-name" id="sidebarUserName">当前用户</div>
+            <div class="user-role" id="sidebarUserRole">角色</div>
+            <div class="profile-actions">
+                <button onclick="openProfileModal()">编辑个人信息</button>
+            </div>
+        </div>
+        <a href="books.html" class="active">📖 图书管理</a>
+        <a href="borrow.html">📋 借阅管理</a>
+        <a href="readers.html">👥 读者管理</a>
+        <a href="report.html">📊 统计报表</a>
+        <a href="admin.html">🔐 系统安全</a>
+    </div>
+    <div class="main">
+        <h1>📖 图书管理</h1>
+        <div class="card">
+            <div class="action-bar">
+                <input type="text" id="searchInput" class="search-box" placeholder="按书名 / 作者 / 分类搜索">
+                <button id="searchBooksBtn" onclick="searchBooks()">🔍 搜索</button>
+                <button id="addBookBtn" onclick="openAddModal()">➕ 添加图书</button>
+            </div>
+            <table class="data-table" id="bookTable">
+                <thead>
+                    <tr><th>ID</th><th>书名</th><th>作者</th><th>ISBN</th><th>出版社</th><th>分类</th><th>操作</th></tr>
+                </thead>
+                <tbody id="bookListBody">
+                    <!-- 动态渲染 -->
+                </tbody>
+            </table>
+            <div class="pagination" id="bookPagination"></div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑图书的弹窗 -->
+    <div id="bookModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">添加图书</h3>
+            <input type="hidden" id="editBookId">
+            <label>书名</label><input type="text" id="bookTitle" placeholder="书名">
+            <label>作者</label><input type="text" id="bookAuthor" placeholder="作者">
+            <label>ISBN</label><input type="text" id="bookIsbn" placeholder="ISBN">
+            <label>出版社</label><input type="text" id="bookPublisher" placeholder="出版社">
+            <label>分类</label><input type="text" id="bookCategory" placeholder="分类">
+            <div class="modal-buttons">
+                <button onclick="closeModal()">取消</button>
+                <button id="bookCancelBtn" onclick="closeModal()">取消</button>
+                <button id="bookSaveBtn" onclick="saveBook()" class="success">保存</button>
+            </div>
+        </div>
+    </div>
+    <div class="footerbar" id="footerLogout">
+        <div class="footer-info" id="footerUserInfo"></div>
+        <button class="logout-button" onclick="logout()">退出登录</button>
+    </div>
+
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h3>个人信息管理</h3>
+            <input type="hidden" id="profileOldUsername">
+            <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
+            <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
+            <div class="profile-upload">
+                <label>头像</label>
+                <div id="profileAvatarPreview">?</div>
+                <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
+            </div>
+            <div class="modal-buttons">
+                <button onclick="closeProfileModal()">取消</button>
+                <button class="success" onclick="saveProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

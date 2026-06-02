@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>读者管理 - 管理员</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>📚 图书馆管理系统</h2>
+        <div class="user-panel">
+            <div class="avatar" id="sidebarAvatar">?</div>
+            <div class="user-name" id="sidebarUserName">当前用户</div>
+            <div class="user-role" id="sidebarUserRole">角色</div>
+            <div class="profile-actions">
+                <button onclick="openProfileModal()">编辑个人信息</button>
+            </div>
+        </div>
+        <a href="books.html">📖 图书管理</a>
+        <a href="borrow.html">📋 借阅管理</a>
+        <a href="readers.html" class="active">👥 读者管理</a>
+        <a href="report.html">📊 统计报表</a>
+        <a href="admin.html">🔐 系统安全</a>
+    </div>
+    <div class="main">
+        <h1>👥 读者管理</h1>
+        <div class="card">
+            <div class="action-bar">
+                <input type="text" id="readerSearch" class="search-box" placeholder="姓名/借书证号">
+                <button id="searchReadersBtn" onclick="searchReaders()">搜索</button>
+                <button id="addReaderBtn" onclick="openReaderModal()">➕ 添加读者</button>
+            </div>
+            <table class="data-table" id="readerTable">
+                <thead><tr><th>读者ID</th><th>借书证号</th><th>姓名</th><th>电话</th><th>邮箱</th><th>操作</th></tr></thead>
+                <tbody id="readerListBody"></tbody>
+            </table>
+            <div class="pagination" id="readerPagination"></div>
+        </div>
+    </div>
+
+    <!-- 读者弹窗 -->
+    <div id="readerModal" class="modal">
+        <div class="modal-content">
+            <h3 id="readerModalTitle">添加读者</h3>
+            <input type="hidden" id="editReaderId">
+            <label>借书证号</label><input type="text" id="readerCardId">
+            <label>姓名</label><input type="text" id="readerName">
+            <label>电话</label><input type="text" id="readerPhone">
+            <label>邮箱</label><input type="text" id="readerEmail">
+            <div class="modal-buttons">
+                <button onclick="closeReaderModal()">取消</button>
+                <button onclick="saveReader()" class="success">保存</button>
+            </div>
+        </div>
+    </div>
+    <div class="footerbar" id="footerLogout">
+        <div class="footer-info" id="footerUserInfo"></div>
+        <button class="logout-button" onclick="logout()">退出登录</button>
+    </div>
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h3>个人信息管理</h3>
+            <input type="hidden" id="profileOldUsername">
+            <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
+            <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
+            <div class="profile-upload">
+                <label>头像</label>
+                <div id="profileAvatarPreview">?</div>
+                <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
+            </div>
+            <div class="modal-buttons">
+                <button onclick="closeProfileModal()">取消</button>
+                 <button id="profileCancelBtn" onclick="closeProfileModal()">取消</button>
+                 <button id="profileSaveBtn" class="success" onclick="saveProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

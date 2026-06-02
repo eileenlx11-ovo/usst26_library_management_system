@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 图书馆管理系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-shell login-shell">
+        <div class="card login-card">
+            <h1>系统登录</h1>
+            <p>请选择登录角色，输入用户名和密码后进入系统。</p>
+            <div class="form-grid">
+                <label>角色
+                    <select id="loginRole">
+                        <option>系统管理员</option>
+                        <option>图书管理员</option>
+                        <option>读者</option>
+                    </select>
+                </label>
+                <label>用户名
+                    <input type="text" id="loginUsername" placeholder="请输入用户名">
+                </label>
+                <label>密码
+                    <input type="password" id="loginPassword" placeholder="请输入密码">
+                </label>
+            </div>
+            <div class="action-bar welcome-actions">
+                <button onclick="login()">登录</button>
+            </div>
+            <p class="small-text">示例账号：admin/123456、manager01/123456、reader01/123456</p>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>欢迎 - 图书馆管理系统</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell welcome-shell">
+    <aside class="welcome-sidebar">
+      <div class="user-panel">
+        <div class="avatar" id="sidebarAvatar">?</div>
+        <div class="user-name" id="sidebarUserName">当前用户</div>
+        <div class="user-role" id="sidebarUserRole">未登录</div>
+        <div class="profile-actions">
+          <button onclick="openProfileModal()">编辑个人信息</button>
+        </div>
+      </div>
+    </aside>
+    <div class="welcome-main">
+      <!-- 顶部欢迎模块已移除 -->
+
+    <main class="app-main">
+      <section class="panel">
+        <h2>当前登录状态</h2>
+        <p id="currentUserInfo">您尚未登录，请点击“登录系统”。</p>
+      </section>
+
+      <section class="panel">
+        <h2>快速入口</h2>
+        <div class="admin-grid welcome-card-grid">
+          <a class="welcome-card" href="books.html">
+            <strong>图书管理</strong>
+            <p>添加、修改、删除图书信息。</p>
+          </a>
+          <a class="welcome-card" href="borrow.html">
+            <strong>借阅管理</strong>
+            <p>查看借阅记录，处理归还。</p>
+          </a>
+          <a class="welcome-card" href="readers.html">
+            <strong>读者管理</strong>
+            <p>管理读者账号与基本信息。</p>
+          </a>
+          <a class="welcome-card" href="report.html">
+            <strong>统计报表</strong>
+            <p>查看热门图书与活跃读者。</p>
+          </a>
+          <a id="adminCard" class="welcome-card" href="admin.html">
+            <strong>系统安全</strong>
+            <p>设置角色、分类、借阅规则、备份恢复。</p>
+          </a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="footerbar" id="footerLogout">
+    <div class="footer-info" id="footerUserInfo"></div>
+    <button class="logout-button" onclick="logout()">退出登录</button>
+  </div>
+
+  <div id="profileModal" class="modal">
+    <div class="modal-content">
+      <h3>个人信息管理</h3>
+      <input type="hidden" id="profileOldUsername">
+      <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
+      <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
+      <div class="profile-upload">
+        <label>头像</label>
+        <div id="profileAvatarPreview">?</div>
+        <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
+      </div>
+      <div class="modal-buttons">
+        <button onclick="closeProfileModal()">取消</button>
+        <button id="profileCancelBtn" onclick="closeProfileModal()">取消</button>
+        <button id="profileSaveBtn" class="success" onclick="saveProfile()">保存</button>
+      </div>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

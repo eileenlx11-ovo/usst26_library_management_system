@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>系统安全 - 管理员</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>📚 图书馆管理系统</h2>
+        <div class="user-panel">
+            <div class="avatar" id="sidebarAvatar">?</div>
+            <div class="user-name" id="sidebarUserName">当前用户</div>
+            <div class="user-role" id="sidebarUserRole">角色</div>
+            <div class="profile-actions">
+                <button onclick="openProfileModal()">编辑个人信息</button>
+            </div>
+        </div>
+        <a href="books.html">📖 图书管理</a>
+        <a href="borrow.html">📋 借阅管理</a>
+        <a href="readers.html">👥 读者管理</a>
+        <a href="report.html">📊 统计报表</a>
+        <a href="admin.html" class="active">🔐 系统安全</a>
+    </div>
+    <div class="main">
+        <h1>🔐 系统安全</h1>
+        <div class="admin-grid">
+            <div class="card">
+                <h3>用户权限管理</h3>
+                <div class="action-bar">
+                    <button id="addRoleBtn" onclick="openRoleModal(null)">➕ 新增用户权限</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr><th>ID</th><th>用户名</th><th>角色</th><th>操作</th></tr>
+                    </thead>
+                    <tbody id="roleListBody"></tbody>
+                </table>
+            </div>
+            <div class="card">
+                <h3>图书分类管理</h3>
+                <div class="action-bar">
+                    <button id="addCategoryBtn" onclick="openCategoryModal(null)">➕ 新增分类</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr><th>序号</th><th>分类名称</th><th>操作</th></tr>
+                    </thead>
+                    <tbody id="categoryListBody"></tbody>
+                </table>
+            </div>
+            <div class="card">
+                <h3>借阅规则设置</h3>
+                <div class="rule-row">
+                    <label>最大借阅数量
+                        <input type="number" id="maxBorrow" min="1" step="1">
+                    </label>
+                    <label>借阅天数
+                        <input type="number" id="borrowDays" min="1" step="1">
+                    </label>
+                    <label>逾期费用（元/天）
+                        <input type="number" id="overdueFee" min="0" step="0.1">
+                    </label>
+                </div>
+                <button id="saveBorrowRulesBtn" onclick="saveBorrowRules()">保存规则</button>
+            </div>
+            <div class="card">
+                <h3>数据备份与恢复</h3>
+                <p>演示模式下模拟备份与还原操作，实际项目请对接后端备份接口。</p>
+                <div class="action-bar">
+                    <button id="backupBtn" onclick="backupData()">备份数据</button>
+                    <button id="restoreDemoBtn" class="danger" onclick="restoreDemoData()">恢复演示数据</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="roleModal" class="modal">
+        <div class="modal-content">
+            <h3 id="roleModalTitle">新增用户权限</h3>
+            <input type="hidden" id="editRoleId">
+            <label>用户名</label><input type="text" id="roleUsername" placeholder="请输入用户名">
+            <label>角色</label>
+            <select id="roleType">
+                <option>系统管理员</option>
+                <option>图书管理员</option>
+                <option>读者</option>
+            </select>
+            <div class="modal-buttons">
+                <button onclick="closeRoleModal()">取消</button>
+                <button class="success" onclick="saveRole()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="categoryModal" class="modal">
+        <div class="modal-content">
+            <h3 id="categoryModalTitle">新增图书分类</h3>
+            <input type="hidden" id="editCategoryIndex">
+            <label>分类名称</label><input type="text" id="categoryName" placeholder="请输入分类名称">
+            <div class="modal-buttons">
+                <button onclick="closeCategoryModal()">取消</button>
+                <button class="success" onclick="saveCategory()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="footerbar" id="footerLogout">
+        <div class="footer-info" id="footerUserInfo"></div>
+        <button class="logout-button" onclick="logout()">退出登录</button>
+    </div>
+
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h3>个人信息管理</h3>
+            <input type="hidden" id="profileOldUsername">
+            <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
+            <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
+            <div class="profile-upload">
+                <label>头像</label>
+                <div id="profileAvatarPreview">?</div>
+                <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
+            </div>
+            <div class="modal-buttons">
+                <button onclick="closeProfileModal()">取消</button>
+                 <button id="profileCancelBtn" onclick="closeProfileModal()">取消</button>
+                 <button id="profileSaveBtn" class="success" onclick="saveProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
