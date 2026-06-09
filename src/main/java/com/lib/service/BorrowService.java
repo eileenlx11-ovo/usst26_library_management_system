@@ -10,6 +10,9 @@ public interface BorrowService {
     // 归还处理
     void returnBook(Integer borrowId);
 
+    // 续借处理（限制续借次数，延长应还日期）
+    void renewBook(Integer borrowId);
+
     // 逾期催还：返回需要通知的读者 ID 列表
     List<Integer> notifyOverdue();
 }

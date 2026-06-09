@@ -3,10 +3,18 @@ package com.lib.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.lib.pojo.BorrowRecord;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
-// @Mapper 告诉 Spring 框架：“嘿，把这个接口变成一个可以直接操作数据库的机械臂”
 @Mapper
 public interface BorrowRecordMapper extends BaseMapper<BorrowRecord> {
-    // 里面什么都不用写！
-    // 因为继承了 BaseMapper<BorrowRecord>，它已经悄悄学会了所有的增删改查基本功
+
+    @Select("SELECT COUNT(1) FROM reader WHERE reader_id = #{readerId}")
+    int countReaderById(@Param("readerId") Integer readerId);
+
+    @Select("SELECT reader_type FROM reader WHERE reader_id = #{readerId}")
+    String selectReaderTypeById(@Param("readerId") Integer readerId);
+
+    @Select("SELECT status FROM reader WHERE reader_id = #{readerId}")
+    String selectReaderStatusById(@Param("readerId") Integer readerId);
 }
