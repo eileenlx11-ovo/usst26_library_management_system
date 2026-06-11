@@ -99,7 +99,25 @@ CREATE TABLE IF NOT EXISTS `User` (
 );
 
 -- =============================================
--- 6. 索引设计（性能优化）【新增】
+-- 6. 邀请码表 InviteCode（注册权限控制）【新增】
+-- 管理员生成邀请码，注册时必须填写正确邀请码才能获得对应角色
+-- =============================================
+CREATE TABLE IF NOT EXISTS InviteCode (
+    code_id INT PRIMARY KEY AUTO_INCREMENT,
+    code VARCHAR(32) NOT NULL UNIQUE COMMENT '邀请码（UUID或随机字符串）',
+    role VARCHAR(20) NOT NULL COMMENT '该邀请码对应的角色：系统管理员/图书管理员/读者',
+    created_by INT DEFAULT NULL COMMENT '生成该邀请码的管理员 user_id',
+    used_by INT DEFAULT NULL COMMENT '使用该邀请码注册的 user_id',
+    is_used BOOLEAN DEFAULT FALSE,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expire_time DATETIME NOT NULL COMMENT '过期时间',
+
+    CONSTRAINT fk_invite_created_by FOREIGN KEY (created_by) REFERENCES `User`(user_id),
+    CONSTRAINT fk_invite_used_by FOREIGN KEY (used_by) REFERENCES `User`(user_id)
+);
+
+-- =============================================
+-- 7. 索引设计（性能优化）【新增】
 -- =============================================
 
 -- 借阅记录表：高频查询字段
@@ -116,3 +134,7 @@ CREATE INDEX idx_fine_paid ON Fine(is_paid);
 
 -- 用户表：按角色查询
 CREATE INDEX idx_user_role ON `User`(role);
+
+-- 邀请码表：按使用状态和过期时间查询
+CREATE INDEX idx_invite_used ON InviteCode(is_used);
+CREATE INDEX idx_invite_expire ON InviteCode(expire_time);
