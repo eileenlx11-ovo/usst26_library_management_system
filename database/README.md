@@ -1,6 +1,6 @@
-# 📚 图书管理系统 - 数据库设计文件
+# 📚 图书管理系统 — 数据库模块
 
-本目录存放图书管理系统的全部数据库设计文件，供**前后端开发**和**实验报告撰写**的同学参考。
+数据库原理课程大作业 · 数据库设计与实现
 
 ---
 
@@ -8,204 +8,111 @@
 
 ```
 database/
-├── README.md                ← 本文件（使用说明）
-├── sql/                     ← 建表语句（按顺序执行）
-│   ├── 01_图书模块_建表.sql    ← Author, Book, Category, Publisher 四张表
-│   ├── 02_借阅模块_建表.sql    ← Reader, Rule, BorrowRecord, Fine 四张表
-│   └── 03_罚款触发器.sql       ← 逾期归还自动生成罚款的触发器
-├── data/                    ← 测试数据
-│   ├── 04_全部插入数据.sql     ← 全部表的插入数据
-│   └── 字段查询结果.xls        ← 各表字段结构导出（报告可直接引用）
-├── query/                   ← 查询脚本
-│   ├── 05_展示查询.sql        ← 答辩演示用查询（含统计报表）
-│   └── 06_字段查询.sql        ← 查询所有表的字段信息（生成报告用）
-└── design/                  ← 设计文档
-    ├── 图书管理系统总E-R图.drawio  ← 完整系统E-R图
-    └── 借阅系统数据库设计.md       ← 借阅模块设计文档（含范式分析）
+├── README.md                      ← 本文件
+├── sql/                           ← 建表语句（按顺序执行）
+│   ├── 01_图书模块_建表.sql         ← Author, Publisher, Category, Book
+│   ├── 02_借阅模块_建表.sql         ← Reader, Rule, BorrowRecord, Fine, User + 索引
+│   └── 03_罚款触发器.sql            ← 触发器（逾期自动罚款 + 库存自动增减）
+├── data/                          ← 测试数据
+│   ├── 04_全部插入数据.sql          ← 9 张表完整测试数据
+│   ├── user表字段查询.xls           ← User 表字段导出
+│   └── 字段查询结果.xls             ← 各表字段结构导出（报告可直接引用）
+├── query/                         ← 查询脚本
+│   ├── 05_展示查询.sql             ← 答辩演示（统计报表 + 视图 + 存储过程）
+│   └── 06_字段查询.sql             ← 查询 INFORMATION_SCHEMA 生成字段报告
+└── design/                        ← 设计文档
+    ├── 系统数据库设计.md            ← 关系模式 + 范式分析 + 外键关系 + 索引设计
+    └── 图书管理系统总E-R图.drawio   ← 完整系统 E-R 图
 ```
 
 ---
 
-## 🚀 快速开始：如何搭建数据库
+## 🚀 快速开始
 
 ### 环境要求
 
 - MySQL 8.0+
-- 推荐工具：Navicat / DataGrip / MySQL Workbench / 命令行
+- 字符集：utf8mb4
+- 推荐工具：Navicat / DataGrip / MySQL Workbench
 
 ### 执行顺序（严格按序号）
 
+```sql
+-- 1. 建表
+source sql/01_图书模块_建表.sql      -- Author, Publisher, Category, Book
+source sql/02_借阅模块_建表.sql      -- Reader, Rule, BorrowRecord, Fine, User + 索引
+
+-- 2. 插入测试数据
+source data/04_全部插入数据.sql
+
+-- 3. 创建触发器
+source sql/03_罚款触发器.sql
+
+-- 4. 运行演示查询（答辩用）
+source query/05_展示查询.sql
 ```
-1. 执行 sql/01_图书模块_建表.sql      → 创建 Author, Book, Category, Publisher
-2. 执行 sql/02_借阅模块_建表.sql      → 创建 Reader, Rule, BorrowRecord, Fine
-3. 执行 sql/03_罚款触发器.sql         → 创建自动罚款触发器
-4. 执行 data/04_全部插入数据.sql      → 插入全部测试数据
-5. 执行 query/05_展示查询.sql        → 验证数据（可选，答辩演示用）
-```
 
-> ⚠️ **注意**：建表有外键依赖，必须按顺序执行。先建图书模块，再建借阅模块。
+---
 
-### 数据库名称
+## 📊 数据库表概览（9 张表）
 
-请先手动创建数据库：
+| 表名 | 说明 | 记录数 |
+|------|------|--------|
+| Author | 作者信息 | 15 |
+| Publisher | 出版社信息 | 8 |
+| Category | 图书分类 | 8 |
+| Book | 图书信息 | 10 |
+| Reader | 读者信息 | 20 |
+| User | 系统用户（登录认证） | 20 |
+| Rule | 借阅规则 | 4 |
+| BorrowRecord | 借阅记录 | 30 |
+| Fine | 罚款记录 | 6 |
+
+---
+
+## 🔑 User 表设计
 
 ```sql
-CREATE DATABASE 借阅系统数据库 DEFAULT CHARSET utf8mb4;
+CREATE TABLE User (
+    user_id     INT PRIMARY KEY AUTO_INCREMENT,
+    username    VARCHAR(50) NOT NULL UNIQUE,
+    password    VARCHAR(255) NOT NULL,
+    role        VARCHAR(20) NOT NULL,          -- 系统管理员/图书管理员/读者
+    reader_id   INT DEFAULT NULL,              -- 读者角色关联 Reader 表
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login  DATETIME,
+    is_active   BOOLEAN DEFAULT TRUE
+);
 ```
 
----
-
-## 📖 各文件详细说明
-
-### sql/01_图书模块_建表.sql
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | 创建图书相关的 4 张基础表 |
-| 包含表 | `Author`（作者）、`Book`（图书）、`Category`（分类）、`Publisher`（出版社） |
-| 导出工具 | Navicat Premium |
-| 注意 | 脚本开头有 `DROP TABLE IF EXISTS`，重复执行会清空数据 |
-
-### sql/02_借阅模块_建表.sql
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | 创建借阅相关的 4 张业务表 |
-| 包含表 | `Reader`（读者）、`Rule`（借阅规则）、`BorrowRecord`（借阅记录）、`Fine`（罚款） |
-| 外键依赖 | `BorrowRecord.book_id` 引用 `Book` 表（需先执行 01） |
-
-### sql/03_罚款触发器.sql
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | `AFTER UPDATE` 触发器，归还图书时自动计算罚款 |
-| 触发条件 | `return_date` 从 NULL 变为非 NULL，且 `overdue_days > 0` |
-| 计算公式 | 罚款金额 = 逾期天数 × 每日罚款费用（从 Rule 表读取） |
-
-### data/04_全部插入数据.sql
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | 8 张表的完整测试数据 |
-| 数据量 | 15位作者、8家出版社、8个分类、10本图书、4条规则、20位读者、30条借阅记录、6条罚款 |
-| 特点 | 真实图书/作者名，覆盖正常借还、续借、逾期、未还等场景 |
-| 注意 | 如已创建触发器，逾期归还会自动生成罚款，避免与手动插入的数据冲突 |
-
-### query/05_展示查询.sql
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | 答辩演示用的完整查询脚本 |
-| 包含 | 基础查询、借阅记录、逾期查询、罚款明细、热门图书TOP5、月度统计、逾期率分析 |
-| 亮点 | 续借操作演示 + 归还操作 + 触发器自动罚款演示 |
-
-### query/06_字段查询.sql
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | 查询 `INFORMATION_SCHEMA.COLUMNS` 获取表结构 |
-| 用途 | 生成报告中的"表结构说明"章节 |
-| 输出 | 表名、字段名、数据类型、是否为空、键类型、默认值、额外属性 |
-
-### data/字段查询结果.xls
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | 字段查询导出的 Excel 结果 |
-| 用途 | 报告中可直接复制粘贴表结构，无需再跑SQL |
-| 打开方式 | Microsoft Excel / WPS |
-
-### design/图书管理系统总E-R图.drawio
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | 完整系统 E-R 图，包含全部 8 张表及关系 |
-| 格式 | draw.io XML |
-| 打开方式 | 见下方 |
-
-### design/借阅系统数据库设计.md
-
-| 信息 | 说明 |
-|------|------|
-| 内容 | 借阅模块完整设计文档 |
-| 包含 | E-R图、关系模式、建表语句、业务SQL、触发器、范式分析（3NF） |
-| 打开方式 | GitHub 直接预览 / VS Code |
+支持三种角色：系统管理员、图书管理员、读者。读者用户通过 `reader_id` 外键关联 Reader 表。
 
 ---
 
-## 🛠️ 文件打开方式
+## ⚡ 触发器
 
-### .sql 文件
-
-| 工具 | 操作 |
-|------|------|
-| **Navicat** | 连接数据库 → 右键数据库 → "运行SQL文件" |
-| **DataGrip** | 打开文件 → 选择数据源 → Ctrl+Enter 执行 |
-| **MySQL Workbench** | File → Open SQL Script → 执行 |
-| **命令行** | `mysql -u root -p 借阅系统数据库 < 文件名.sql` |
-| **VS Code** | 安装 MySQL 插件后可直接执行 |
-
-### .drawio 文件（E-R图）
-
-| 方式 | 操作 |
-|------|------|
-| **在线（推荐）** | 访问 [draw.io](https://app.diagrams.net/) → "打开现有图表" → 上传文件 |
-| **VS Code** | 安装 `Draw.io Integration` 插件，双击打开 |
-| **桌面版** | 下载 [draw.io Desktop](https://github.com/jgraph/drawio-desktop/releases) |
-| **导出PNG** | 打开后 File → Export as → PNG（放入报告） |
-
-### .xls 文件
-
-| 工具 | 操作 |
-|------|------|
-| **Excel** | 双击直接打开 |
-| **WPS** | 双击直接打开 |
-| **Google Sheets** | 上传 Google Drive 后在线查看 |
-
-### .md 文件
-
-| 工具 | 操作 |
-|------|------|
-| **GitHub** | 推送后网页直接渲染 |
-| **VS Code** | Ctrl+Shift+V 预览 |
-| **Typora** | 所见即所得编辑 |
+| 触发器 | 触发时机 | 功能 |
+|--------|----------|------|
+| trg_overdue_fine | 归还时 (BEFORE UPDATE) | 逾期自动生成罚款记录 |
+| trg_borrow_decrease_stock | 借出时 (AFTER INSERT) | 可借册数 -1 |
+| trg_return_increase_stock | 归还时 (AFTER UPDATE) | 可借册数 +1 |
 
 ---
 
-## 👥 分工参考
+## 📈 存储过程（展示查询中）
 
-| 角色 | 关注文件 |
-|------|----------|
-| 写报告的同学 | `design/` 全部 + `data/字段查询结果.xls` + 各 SQL 文件截图 |
-| 后端开发 | `sql/` 全部（对照表结构写 Entity 和 Repository） |
-| 前端开发 | 参考下方表结构设计页面和接口 |
-
----
-
-## 🔗 数据库表一览（共 8 张）
-
-| 表名 | 说明 | 核心字段 |
-|------|------|----------|
-| `Author` | 作者 | author_id, author_name, country |
-| `Publisher` | 出版社 | publisher_id, publisher_name, address, phone |
-| `Category` | 分类 | category_id, category_name, description |
-| `Book` | 图书 | book_id, isbn, book_name, price, total_count, available_count, status |
-| `Reader` | 读者 | reader_id, reader_name, reader_type, status |
-| `Rule` | 借阅规则 | rule_id, reader_type, max_borrow_days, fine_per_day |
-| `BorrowRecord` | 借阅记录 | borrow_id, reader_id, book_id, borrow_date, due_date, borrow_status |
-| `Fine` | 罚款 | fine_id, borrow_id, fine_amount, is_paid |
+- 借阅操作 `sp_borrow_book`
+- 归还操作 `sp_return_book`
+- 续借操作 `sp_renew_book`
+- 缴纳罚款 `sp_pay_fine`
 
 ---
 
-## 💡 后端开发建议
+## 📝 与上一版的变化
 
-基于表结构，建议实现以下 REST API：
-
-- `GET/POST /api/books` — 图书 CRUD
-- `GET/POST /api/readers` — 读者 CRUD
-- `POST /api/borrow` — 借书
-- `POST /api/return` — 还书（触发器自动处理罚款）
-- `POST /api/renew` — 续借
-- `GET /api/fines` — 罚款查询
-
-> 后端 Spring Boot 项目已在仓库根目录，可直接对接。
+- **新增 User 表**：统一登录认证，支持三级角色
+- **新增 7 个索引**：借阅记录、读者类型、罚款状态、用户角色等高频查询优化
+- **新增库存触发器**：借出/归还自动维护可借册数
+- **新增存储过程**：借/还/续/缴罚款，含事务和错误处理
+- **新增设计文档**：关系模式、范式分析、外键关系图、索引设计说明
+- 原有 8 张表的建表语句和数据不变

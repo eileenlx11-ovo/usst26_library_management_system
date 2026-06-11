@@ -30,10 +30,28 @@ CREATE TABLE `Author` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- ----------------------------
--- Records of Author
+-- Table structure for Publisher
 -- ----------------------------
-BEGIN;
-COMMIT;
+DROP TABLE IF EXISTS `Publisher`;
+CREATE TABLE `Publisher` (
+  `publisher_id` int NOT NULL AUTO_INCREMENT,
+  `publisher_name` varchar(100) NOT NULL,
+  `address` varchar(200) DEFAULT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`publisher_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ----------------------------
+-- Table structure for Category
+-- ----------------------------
+DROP TABLE IF EXISTS `Category`;
+CREATE TABLE `Category` (
+  `category_id` int NOT NULL AUTO_INCREMENT,
+  `category_name` varchar(50) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`category_id`),
+  UNIQUE KEY `category_name` (`category_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- ----------------------------
 -- Table structure for Book
@@ -60,47 +78,5 @@ CREATE TABLE `Book` (
   CONSTRAINT `fk_book_category` FOREIGN KEY (`category_id`) REFERENCES `Category` (`category_id`),
   CONSTRAINT `fk_book_publisher` FOREIGN KEY (`publisher_id`) REFERENCES `Publisher` (`publisher_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- ----------------------------
--- Records of Book
--- ----------------------------
-BEGIN;
-COMMIT;
-
--- ----------------------------
--- Table structure for Category
--- ----------------------------
-DROP TABLE IF EXISTS `Category`;
-CREATE TABLE `Category` (
-  `category_id` int NOT NULL AUTO_INCREMENT,
-  `category_name` varchar(50) NOT NULL,
-  `description` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`category_id`),
-  UNIQUE KEY `category_name` (`category_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- ----------------------------
--- Records of Category
--- ----------------------------
-BEGIN;
-COMMIT;
-
--- ----------------------------
--- Table structure for Publisher
--- ----------------------------
-DROP TABLE IF EXISTS `Publisher`;
-CREATE TABLE `Publisher` (
-  `publisher_id` int NOT NULL AUTO_INCREMENT,
-  `publisher_name` varchar(100) NOT NULL,
-  `address` varchar(200) DEFAULT NULL,
-  `phone` varchar(20) DEFAULT NULL,
-  PRIMARY KEY (`publisher_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- ----------------------------
--- Records of Publisher
--- ----------------------------
-BEGIN;
-COMMIT;
 
 SET FOREIGN_KEY_CHECKS = 1;
