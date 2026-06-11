@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>读者管理 - 图书馆管理系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brand-mark">L</span>
+                <div>
+                    <strong>图书馆管理系统</strong>
+                    <small>数据库原理大作业</small>
+                </div>
+            </div>
+            <div class="user-panel">
+                <div class="avatar" id="sidebarAvatar">?</div>
+                <div class="user-name" id="sidebarUserName">当前用户</div>
+                <div class="user-role" id="sidebarUserRole">未登录</div>
+                <div class="profile-actions">
+                    <button onclick="openProfileModal()">编辑个人信息</button>
+                </div>
+            </div>
+            <nav class="nav-list" aria-label="主导航">
+                <!-- JS动态渲染 -->
+            </nav>
+            <div class="sidebar-footer">
+                <div class="footer-info" id="footerUserInfo"></div>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </aside>
+
+        <!-- 内容区 -->
+        <main class="content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Library Management System</p>
+                    <h1 id="pageTitle">👥 读者管理</h1>
+                </div>
+            </header>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>读者账号列表</h2>
+                        <p>管理读者基本信息，支持增删改查。</p>
+                    </div>
+                    <button class="primary-btn" onclick="openReaderModal()">➕ 添加读者</button>
+                </div>
+                <div class="toolbar">
+                    <input type="text" id="readerSearch" class="search-box" placeholder="按姓名 / 借书证号搜索">
+                    <button class="primary-btn" onclick="searchReaders()">🔍 搜索</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>ID</th><th>借书证号</th><th>姓名</th><th>性别</th><th>电话</th><th>邮箱</th><th>类型</th><th>状态</th><th>操作</th></tr>
+                        </thead>
+                        <tbody id="readerListBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="readerPagination"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 读者弹窗 -->
+    <div id="readerModal" class="modal">
+        <div class="modal-content">
+            <h3 id="readerModalTitle">添加读者</h3>
+            <input type="hidden" id="editReaderId">
+            <div class="form-grid">
+                <label>借书证号<input type="text" id="readerCardId" required></label>
+                <label>姓名<input type="text" id="readerName" required></label>
+                <label>性别
+                    <select id="readerGender"><option>男</option><option>女</option></select>
+                </label>
+                <label>电话<input type="text" id="readerPhone"></label>
+                <label>邮箱<input type="text" id="readerEmail"></label>
+                <label>读者类型
+                    <select id="readerType"><option>学生</option><option>教师</option></select>
+                </label>
+                <label>状态
+                    <select id="readerStatus"><option>正常</option><option>停用</option></select>
+                </label>
+            </div>
+            <div class="modal-buttons">
+                <button class="ghost-btn" onclick="closeReaderModal()">取消</button>
+                <button class="primary-btn" onclick="saveReader()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 个人信息弹窗 -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h3>个人信息管理</h3>
+            <input type="hidden" id="profileOldUsername">
+            <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
+            <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
+            <div class="profile-upload">
+                <label>头像</label>
+                <div id="profileAvatarPreview">?</div>
+                <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
+            </div>
+            <div class="modal-buttons">
+                <button class="ghost-btn" onclick="closeProfileModal()">取消</button>
+                <button class="primary-btn" onclick="saveProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/mock-data.js"></script>
+    <script src="js/api.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

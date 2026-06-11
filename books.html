@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图书管理 - 图书馆管理系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brand-mark">L</span>
+                <div>
+                    <strong>图书馆管理系统</strong>
+                    <small>数据库原理大作业</small>
+                </div>
+            </div>
+            <div class="user-panel">
+                <div class="avatar" id="sidebarAvatar">?</div>
+                <div class="user-name" id="sidebarUserName">当前用户</div>
+                <div class="user-role" id="sidebarUserRole">未登录</div>
+                <div class="profile-actions">
+                    <button onclick="openProfileModal()">编辑个人信息</button>
+                </div>
+            </div>
+            <nav class="nav-list" aria-label="主导航">
+                <!-- JS动态渲染 -->
+            </nav>
+            <div class="sidebar-footer">
+                <div class="footer-info" id="footerUserInfo"></div>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </aside>
+
+        <!-- 内容区 -->
+        <main class="content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Library Management System</p>
+                    <h1 id="pageTitle">📖 图书管理</h1>
+                </div>
+            </header>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>图书查询与管理</h2>
+                        <p>支持按书名、作者、ISBN、分类检索。管理员可增删改图书。</p>
+                    </div>
+                    <button class="primary-btn" id="addBookBtn" onclick="openBookModal()">➕ 添加图书</button>
+                </div>
+                <div class="toolbar">
+                    <input type="text" id="searchInput" class="search-box" placeholder="按书名 / 作者 / ISBN / 分类搜索">
+                    <select id="categoryFilter">
+                        <option value="">全部分类</option>
+                    </select>
+                    <select id="availabilityFilter">
+                        <option value="">全部状态</option>
+                        <option value="available">只看可借</option>
+                        <option value="empty">库存不足</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>ID</th><th>书名</th><th>作者</th><th>ISBN</th><th>出版社</th><th>分类</th><th>库存</th><th>状态</th><th>操作</th></tr>
+                        </thead>
+                        <tbody id="bookListBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="bookPagination"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 图书弹窗 -->
+    <div id="bookModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">添加图书</h3>
+            <input type="hidden" id="editBookId">
+            <div class="form-grid">
+                <label>书名<input type="text" id="bookTitle" placeholder="书名" required></label>
+                <label>作者<input type="text" id="bookAuthor" placeholder="作者" required></label>
+                <label>ISBN<input type="text" id="bookIsbn" placeholder="ISBN"></label>
+                <label>出版社<input type="text" id="bookPublisher" placeholder="出版社"></label>
+                <label>分类<input type="text" id="bookCategory" placeholder="分类" required></label>
+                <label>总册数<input type="number" id="bookTotal" min="1" required></label>
+                <label>可借册数<input type="number" id="bookAvailable" min="0" required></label>
+            </div>
+            <div class="modal-buttons">
+                <button class="ghost-btn" onclick="closeBookModal()">取消</button>
+                <button class="primary-btn" onclick="saveBook()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 个人信息弹窗 -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h3>个人信息管理</h3>
+            <input type="hidden" id="profileOldUsername">
+            <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
+            <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
+            <div class="profile-upload">
+                <label>头像</label>
+                <div id="profileAvatarPreview">?</div>
+                <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
+            </div>
+            <div class="modal-buttons">
+                <button class="ghost-btn" onclick="closeProfileModal()">取消</button>
+                <button class="primary-btn" onclick="saveProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/mock-data.js"></script>
+    <script src="js/api.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
