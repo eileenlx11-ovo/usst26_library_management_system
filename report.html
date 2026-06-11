@@ -2,47 +2,86 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>统计报表 - 管理员</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>统计报表 - 图书馆管理系统</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="sidebar">
-        <h2>📚 图书馆管理系统</h2>
-        <div class="user-panel">
-            <div class="avatar" id="sidebarAvatar">?</div>
-            <div class="user-name" id="sidebarUserName">当前用户</div>
-            <div class="user-role" id="sidebarUserRole">角色</div>
-            <div class="profile-actions">
-                <button onclick="openProfileModal()">编辑个人信息</button>
+    <div class="app-shell">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brand-mark">L</span>
+                <div>
+                    <strong>图书馆管理系统</strong>
+                    <small>数据库原理大作业</small>
+                </div>
             </div>
-        </div>
-        <a href="books.html">📖 图书管理</a>
-        <a href="borrow.html">📋 借阅管理</a>
-        <a href="readers.html">👥 读者管理</a>
-        <a href="report.html" class="active">📊 统计报表</a>
-        <a href="admin.html">🔐 系统安全</a>
+            <div class="user-panel">
+                <div class="avatar" id="sidebarAvatar">?</div>
+                <div class="user-name" id="sidebarUserName">当前用户</div>
+                <div class="user-role" id="sidebarUserRole">未登录</div>
+                <div class="profile-actions">
+                    <button onclick="openProfileModal()">编辑个人信息</button>
+                </div>
+            </div>
+            <nav class="nav-list" aria-label="主导航">
+                <!-- JS动态渲染 -->
+            </nav>
+            <div class="sidebar-footer">
+                <div class="footer-info" id="footerUserInfo"></div>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </aside>
+
+        <!-- 内容区 -->
+        <main class="content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Library Management System</p>
+                    <h1 id="pageTitle">📊 统计报表</h1>
+                </div>
+                <div class="top-actions">
+                    <span class="status-pill" id="todayText"></span>
+                </div>
+            </header>
+
+            <div class="two-column">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <h2>🔥 热门图书排行</h2>
+                        <span>按借阅次数排序</span>
+                    </div>
+                    <div class="bar-list" id="hotBookBars"></div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-heading">
+                        <h2>⭐ 活跃读者排行</h2>
+                        <span>按借阅次数排序</span>
+                    </div>
+                    <div class="bar-list" id="activeReaderBars"></div>
+                </section>
+            </div>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <h2>⚠️ 逾期催还名单</h2>
+                    <span>用于图书管理员通知读者</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>读者</th><th>电话</th><th>图书</th><th>应还日期</th><th>逾期天数</th><th>预计罚款</th></tr>
+                        </thead>
+                        <tbody id="overdueTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
     </div>
-    <div class="main">
-        <h1>📊 统计报表</h1>
-        <div class="card">
-            <h3>🔥 热门图书排行 (借阅次数)</h3>
-            <table class="data-table" id="hotBooksTable">
-                <thead><tr><th>排名</th><th>书名</th><th>借阅次数</th></tr></thead>
-                <tbody id="hotBooksBody"></tbody>
-            </table>
-        </div>
-        <div class="card">
-            <h3>⭐ 活跃读者排行 (借书数量)</h3>
-            <table class="data-table" id="activeReadersTable">
-                <thead><tr><th>排名</th><th>读者姓名</th><th>借阅次数</th></tr></thead>
-                <tbody id="activeReadersBody"></tbody>
-            </table>
-        </div>
-    </div>
-    <div class="footerbar" id="footerLogout">
-        <div class="footer-info" id="footerUserInfo"></div>
-        <button class="logout-button" onclick="logout()">退出登录</button>
-    </div>
+
+    <!-- 个人信息弹窗 -->
     <div id="profileModal" class="modal">
         <div class="modal-content">
             <h3>个人信息管理</h3>
@@ -55,12 +94,14 @@
                 <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
             </div>
             <div class="modal-buttons">
-                <button onclick="closeProfileModal()">取消</button>
-                 <button id="profileCancelBtn" onclick="closeProfileModal()">取消</button>
-                 <button id="profileSaveBtn" class="success" onclick="saveProfile()">保存</button>
+                <button class="ghost-btn" onclick="closeProfileModal()">取消</button>
+                <button class="primary-btn" onclick="saveProfile()">保存</button>
             </div>
         </div>
     </div>
+
+    <script src="js/mock-data.js"></script>
+    <script src="js/api.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

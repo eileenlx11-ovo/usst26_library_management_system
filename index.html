@@ -1,82 +1,131 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>欢迎 - 图书馆管理系统</title>
-  <link rel="stylesheet" href="styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>总览 - 图书馆管理系统</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-shell welcome-shell">
-    <aside class="welcome-sidebar">
-      <div class="user-panel">
-        <div class="avatar" id="sidebarAvatar">?</div>
-        <div class="user-name" id="sidebarUserName">当前用户</div>
-        <div class="user-role" id="sidebarUserRole">未登录</div>
-        <div class="profile-actions">
-          <button onclick="openProfileModal()">编辑个人信息</button>
-        </div>
-      </div>
-    </aside>
-    <div class="welcome-main">
-      <!-- 顶部欢迎模块已移除 -->
+    <div class="app-shell">
+        <!-- 侧边栏（动态渲染） -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brand-mark">L</span>
+                <div>
+                    <strong>图书馆管理系统</strong>
+                    <small>数据库原理大作业</small>
+                </div>
+            </div>
+            <div class="user-panel">
+                <div class="avatar" id="sidebarAvatar">?</div>
+                <div class="user-name" id="sidebarUserName">当前用户</div>
+                <div class="user-role" id="sidebarUserRole">未登录</div>
+                <div class="profile-actions">
+                    <button onclick="openProfileModal()">编辑个人信息</button>
+                </div>
+            </div>
+            <nav class="nav-list" aria-label="主导航">
+                <!-- JS动态渲染 -->
+            </nav>
+            <div class="sidebar-footer">
+                <div class="footer-info" id="footerUserInfo"></div>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </aside>
 
-    <main class="app-main">
-      <section class="panel">
-        <h2>当前登录状态</h2>
-        <p id="currentUserInfo">您尚未登录，请点击“登录系统”。</p>
-      </section>
+        <!-- 内容区 -->
+        <main class="content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Library Management System</p>
+                    <h1 id="pageTitle">📊 总览</h1>
+                </div>
+                <div class="top-actions">
+                    <span class="status-pill" id="todayText"></span>
+                </div>
+            </header>
 
-      <section class="panel">
-        <h2>快速入口</h2>
-        <div class="admin-grid welcome-card-grid">
-          <a class="welcome-card" href="books.html">
-            <strong>图书管理</strong>
-            <p>添加、修改、删除图书信息。</p>
-          </a>
-          <a class="welcome-card" href="borrow.html">
-            <strong>借阅管理</strong>
-            <p>查看借阅记录，处理归还。</p>
-          </a>
-          <a class="welcome-card" href="readers.html">
-            <strong>读者管理</strong>
-            <p>管理读者账号与基本信息。</p>
-          </a>
-          <a class="welcome-card" href="report.html">
-            <strong>统计报表</strong>
-            <p>查看热门图书与活跃读者。</p>
-          </a>
-          <a id="adminCard" class="welcome-card" href="admin.html">
-            <strong>系统安全</strong>
-            <p>设置角色、分类、借阅规则、备份恢复。</p>
-          </a>
-        </div>
-      </section>
-    </main>
-  </div>
-  <div class="footerbar" id="footerLogout">
-    <div class="footer-info" id="footerUserInfo"></div>
-    <button class="logout-button" onclick="logout()">退出登录</button>
-  </div>
+            <!-- 仪表盘指标 -->
+            <div class="metric-grid">
+                <article class="metric-card">
+                    <span>馆藏图书</span>
+                    <strong id="metricBooks">0</strong>
+                    <small>馆藏总量</small>
+                </article>
+                <article class="metric-card">
+                    <span>可借库存</span>
+                    <strong id="metricAvailable">0</strong>
+                    <small>当前可借数量</small>
+                </article>
+                <article class="metric-card">
+                    <span>借阅中</span>
+                    <strong id="metricBorrowing">0</strong>
+                    <small>活跃借阅记录</small>
+                </article>
+                <article class="metric-card">
+                    <span>待缴罚款</span>
+                    <strong id="metricFine">0.00</strong>
+                    <small>未缴纳罚款总额</small>
+                </article>
+            </div>
 
-  <div id="profileModal" class="modal">
-    <div class="modal-content">
-      <h3>个人信息管理</h3>
-      <input type="hidden" id="profileOldUsername">
-      <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
-      <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
-      <div class="profile-upload">
-        <label>头像</label>
-        <div id="profileAvatarPreview">?</div>
-        <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
-      </div>
-      <div class="modal-buttons">
-        <button onclick="closeProfileModal()">取消</button>
-        <button id="profileCancelBtn" onclick="closeProfileModal()">取消</button>
-        <button id="profileSaveBtn" class="success" onclick="saveProfile()">保存</button>
-      </div>
+            <!-- 双栏：待办 + 快速入口 -->
+            <div class="two-column">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <h2>今日待办</h2>
+                        <span id="todoCount">0 项</span>
+                    </div>
+                    <div class="todo-list" id="todoList"></div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-heading">
+                        <h2>快速入口</h2>
+                        <span>点击进入功能模块</span>
+                    </div>
+                    <div class="welcome-card-grid">
+                        <a class="welcome-card" href="books.html">
+                            <strong>📖 图书查询</strong>
+                            <p>搜索图书，办理借阅。</p>
+                        </a>
+                        <a class="welcome-card" href="borrow.html">
+                            <strong>📋 借阅服务</strong>
+                            <p>查看记录，续借归还。</p>
+                        </a>
+                        <a id="adminCard" class="welcome-card" href="admin.html">
+                            <strong>🔐 系统安全</strong>
+                            <p>设置权限、分类、规则。</p>
+                        </a>
+                    </div>
+                </section>
+            </div>
+        </main>
     </div>
-  </div>
-  <script src="script.js"></script>
+
+    <!-- 个人信息弹窗 -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h3>个人信息管理</h3>
+            <input type="hidden" id="profileOldUsername">
+            <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
+            <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
+            <div class="profile-upload">
+                <label>头像</label>
+                <div id="profileAvatarPreview">?</div>
+                <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
+            </div>
+            <div class="modal-buttons">
+                <button class="ghost-btn" onclick="closeProfileModal()">取消</button>
+                <button class="primary-btn" onclick="saveProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>document.getElementById("todayText").textContent = "今天：" + new Date().toISOString().slice(0, 10);</script>
+    <script src="js/mock-data.js"></script>
+    <script src="js/api.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

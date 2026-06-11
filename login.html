@@ -7,9 +7,9 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="app-shell login-shell">
-        <div class="card login-card">
-            <h1>系统登录</h1>
+    <div class="login-shell">
+        <div class="login-card">
+            <h1>📚 图书馆管理系统</h1>
             <p>请选择登录角色，输入用户名和密码后进入系统。</p>
             <div class="form-grid">
                 <label>角色
@@ -26,12 +26,14 @@
                     <input type="password" id="loginPassword" placeholder="请输入密码">
                 </label>
             </div>
-            <div class="action-bar welcome-actions">
-                <button onclick="login()">登录</button>
+            <div style="margin-top: 1.2rem;">
+                <button onclick="login()" class="primary-btn" style="width:100%;">登录</button>
             </div>
             <p class="small-text">示例账号：admin/123456、manager01/123456、reader01/123456</p>
         </div>
     </div>
+    <script src="js/mock-data.js"></script>
+    <script src="js/api.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

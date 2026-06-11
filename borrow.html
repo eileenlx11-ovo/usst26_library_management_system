@@ -2,45 +2,123 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>借阅管理 - 管理员</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>借阅管理 - 图书馆管理系统</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="sidebar">
-        <h2>📚 图书馆管理系统</h2>
-        <div class="user-panel">
-            <div class="avatar" id="sidebarAvatar">?</div>
-            <div class="user-name" id="sidebarUserName">当前用户</div>
-            <div class="user-role" id="sidebarUserRole">角色</div>
-            <div class="profile-actions">
-                <button onclick="openProfileModal()">编辑个人信息</button>
+    <div class="app-shell">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brand-mark">L</span>
+                <div>
+                    <strong>图书馆管理系统</strong>
+                    <small>数据库原理大作业</small>
+                </div>
             </div>
-        </div>
-        <a href="books.html">📖 图书管理</a>
-        <a href="borrow.html" class="active">📋 借阅管理</a>
-        <a href="readers.html">👥 读者管理</a>
-        <a href="report.html">📊 统计报表</a>
-        <a href="admin.html">🔐 系统安全</a>
-    </div>
-    <div class="main">
-        <h1>📋 借阅记录</h1>
-        <div class="card">
-            <div class="action-bar">
-                <input type="text" id="borrowSearch" class="search-box" placeholder="读者姓名或书名">
-                <button onclick="searchBorrowRecords()">搜索</button>
+            <div class="user-panel">
+                <div class="avatar" id="sidebarAvatar">?</div>
+                <div class="user-name" id="sidebarUserName">当前用户</div>
+                <div class="user-role" id="sidebarUserRole">未登录</div>
+                <div class="profile-actions">
+                    <button onclick="openProfileModal()">编辑个人信息</button>
+                </div>
             </div>
-            <table class="data-table" id="borrowTable">
-                <thead>
-                    <tr><th>借阅ID</th><th>读者姓名</th><th>图书名称</th><th>借书日期</th><th>应还日期</th><th>状态</th><th>操作</th></tr>
-                </thead>
-                <tbody id="borrowListBody"></tbody>
-            </table>
-        </div>
+            <nav class="nav-list" aria-label="主导航">
+                <!-- JS动态渲染 -->
+            </nav>
+            <div class="sidebar-footer">
+                <div class="footer-info" id="footerUserInfo"></div>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </aside>
+
+        <!-- 内容区 -->
+        <main class="content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Library Management System</p>
+                    <h1 id="pageTitle">📋 借阅管理</h1>
+                </div>
+                <div class="top-actions">
+                    <button class="ghost-btn" id="notifyBtn" onclick="notifyOverdue()">🔔 逾期催还检查</button>
+                </div>
+            </header>
+
+            <!-- 快速借阅 + 规则摘要（仅管理员可见） -->
+            <div class="two-column" id="adminBorrowSection">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h2>快速借阅</h2>
+                            <p>录入借书证号和图书编号，自动按规则生成应还日期。</p>
+                        </div>
+                    </div>
+                    <form class="form-grid" id="borrowForm">
+                        <label>借书证号
+                            <input id="borrowReaderCard" list="readerCards" placeholder="例如 R2026001" required>
+                        </label>
+                        <label>图书编号
+                            <input id="borrowBookId" type="number" min="1" placeholder="例如 1" required>
+                        </label>
+                        <button class="primary-btn" type="submit">办理借阅</button>
+                    </form>
+                    <datalist id="readerCards"></datalist>
+                </section>
+
+                <section class="panel" id="ruleSummaryPanel">
+                    <div class="panel-heading">
+                        <h2>当前借阅规则</h2>
+                        <span id="currentRuleLabel">学生规则</span>
+                    </div>
+                    <div class="rule-summary" id="ruleSummary"></div>
+                </section>
+            </div>
+
+            <!-- 借阅记录 -->
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>借阅记录</h2>
+                        <p>支持续借和归还操作，逾期归还自动生成罚款。</p>
+                    </div>
+                    <select id="recordStatusFilter">
+                        <option value="">全部记录</option>
+                        <option value="借阅中">借阅中</option>
+                        <option value="已归还">已归还</option>
+                        <option value="逾期">逾期</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>记录号</th><th>读者</th><th>图书</th><th>借阅日期</th><th>应还日期</th><th>状态</th><th>续借</th><th>操作</th></tr>
+                        </thead>
+                        <tbody id="borrowListBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 罚款记录 -->
+            <section class="panel">
+                <div class="panel-heading">
+                    <h2>罚款记录</h2>
+                    <span>逾期归还后自动生成</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>罚款号</th><th>借阅记录</th><th>金额</th><th>生成日期</th><th>状态</th><th>操作</th></tr>
+                        </thead>
+                        <tbody id="fineTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
     </div>
-    <div class="footerbar" id="footerLogout">
-        <div class="footer-info" id="footerUserInfo"></div>
-        <button class="logout-button" onclick="logout()">退出登录</button>
-    </div>
+
+    <!-- 个人信息弹窗 -->
     <div id="profileModal" class="modal">
         <div class="modal-content">
             <h3>个人信息管理</h3>
@@ -53,12 +131,14 @@
                 <input type="file" id="profileAvatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
             </div>
             <div class="modal-buttons">
-                <button onclick="closeProfileModal()">取消</button>
-                <button id="profileCancelBtn" onclick="closeProfileModal()">取消</button>
-                <button id="profileSaveBtn" class="success" onclick="saveProfile()">保存</button>
+                <button class="ghost-btn" onclick="closeProfileModal()">取消</button>
+                <button class="primary-btn" onclick="saveProfile()">保存</button>
             </div>
         </div>
     </div>
+
+    <script src="js/mock-data.js"></script>
+    <script src="js/api.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
