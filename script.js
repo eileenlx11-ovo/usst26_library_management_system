@@ -483,7 +483,7 @@ function loadBooks(page = 1) {
         const current = filter.value;
         filter.innerHTML = '<option value="">全部分类</option>';
         MockData.categories.forEach(c => {
-            filter.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+            filter.innerHTML += `<option value="${escapeHtml(c.category_name)}">${escapeHtml(c.category_name)}</option>`;
         });
         filter.value = current;
     }
@@ -555,7 +555,9 @@ async function saveBook() {
         status: "在馆", borrowCount: 0
     };
     if (book.available > book.total) { showToast("可借册数不能大于总册数"); return; }
-    if (!MockData.categories.includes(book.category)) MockData.categories.push(book.category);
+    if (!MockData.categories.some(c => c.category_name === book.category)) {
+        MockData.categories.push({ category_id: MockData.categories.length + 1, category_name: book.category, description: "" });
+    }
 
     if (id) {
         const idx = MockData.books.findIndex(b => b.id === id);
@@ -594,7 +596,7 @@ async function borrowBookDirect(readerId, bookId) {
     if (reader.status && reader.status !== "正常") { showToast("读者状态异常，无法借阅"); return; }
     if (book.available <= 0) { showToast("该书无可借库存"); return; }
 
-    const rule = MockData.getRuleForType(reader.type || "学生");
+    const rule = MockData.getRuleForType(reader.type || "本科生");
     const activeCount = MockData.borrowRecords.filter(r => r.readerId === readerId && r.borrowStatus !== "已归还").length;
     if (activeCount >= rule.maxBorrowCount) { showToast("已达最大借阅数量"); return; }
 
@@ -782,7 +784,7 @@ function renderRuleSummary(session) {
         <div><strong>${(rule.finePerDay || 0).toFixed(2)} 元/天</strong><span>每日逾期费</span></div>
         <div><strong>${rule.maxRenewTimes || 0} 次</strong><span>最大续借次数</span></div>
         <div><strong>${rule.renewDays || 0} 天</strong><span>每次续借天数</span></div>
-        <div><span>学生规则</span></div>`;
+        <div><span>${rule.readerType}规则</span></div>`;
 }
 
 function payFine(fineId) {
@@ -822,7 +824,7 @@ function loadReaders(page = 1) {
             <td>${escapeHtml(r.gender || "")}</td>
             <td>${escapeHtml(r.phone)}</td>
             <td>${escapeHtml(r.email || "")}</td>
-            <td>${escapeHtml(r.type || "学生")}</td>
+            <td>${escapeHtml(r.type || "本科生")}</td>
             <td><span class="status ${r.status === '正常' ? 'ok' : 'bad'}">${escapeHtml(r.status || '正常')}</span></td>
             <td>
                 <div class="row-actions">
@@ -850,7 +852,7 @@ function openReaderModal() {
         const el = document.getElementById(id);
         if (el) {
             if (id === "readerGender") el.value = "男";
-            else if (id === "readerType") el.value = "学生";
+            else if (id === "readerType") el.value = "本科生";
             else if (id === "readerStatus") el.value = "正常";
             else el.value = "";
         }
@@ -870,7 +872,7 @@ function editReader(id) {
     document.getElementById("readerGender").value = r.gender || "男";
     document.getElementById("readerPhone").value = r.phone;
     document.getElementById("readerEmail").value = r.email || "";
-    document.getElementById("readerType").value = r.type || "学生";
+    document.getElementById("readerType").value = r.type || "本科生";
     document.getElementById("readerStatus").value = r.status || "正常";
     document.getElementById("readerModal").style.display = "flex";
 }
@@ -892,7 +894,7 @@ function saveReader() {
         gender: document.getElementById("readerGender")?.value || "男",
         phone: document.getElementById("readerPhone")?.value.trim() || "",
         email: document.getElementById("readerEmail")?.value.trim() || "",
-        type: document.getElementById("readerType")?.value || "学生",
+        type: document.getElementById("readerType")?.value || "本科生",
         registerDate: todayStr(),
         status: document.getElementById("readerStatus")?.value || "正常"
     };
@@ -1062,12 +1064,21 @@ function loadAdminData() {
     const chipList = document.getElementById("categoryChipList");
     if (chipList) {
         chipList.innerHTML = MockData.categories.map(c => `
-            <span class="chip">${escapeHtml(c)}<button onclick="deleteCategory('${escapeHtml(c)}')">×</button></span>
+            <span class="chip" title="${escapeHtml(c.description || "")}">${escapeHtml(c.category_name)}<button onclick="deleteCategory('${escapeHtml(c.category_name)}')">×</button></span>
         `).join("");
     }
 
-    // 规则设置
-    const rule = MockData.rules[0];
+    // 规则设置（默认加载"本科生"规则）
+    loadRuleForType();
+
+    // 邀请码列表
+    renderInviteCodeList();
+}
+
+function loadRuleForType() {
+    const selector = document.getElementById("ruleReaderType");
+    const type = selector ? selector.value : "本科生";
+    const rule = MockData.getRuleForType(type);
     if (rule) {
         const fields = { maxBorrow: rule.maxBorrowCount, borrowDays: rule.maxBorrowDays, overdueFee: rule.finePerDay, maxRenewTimes: rule.maxRenewTimes, renewDays: rule.renewDays };
         Object.entries(fields).forEach(([id, val]) => {
@@ -1075,9 +1086,6 @@ function loadAdminData() {
             if (el) el.value = val;
         });
     }
-
-    // 邀请码列表
-    renderInviteCodeList();
 }
 
 function openRoleModal(username) {
@@ -1128,7 +1136,7 @@ function openCategoryModal() { /* 简化为直接添加 */ }
 
 async function deleteCategory(name) {
     if (!await showConfirm("确认删除该分类吗？")) return;
-    MockData.categories = MockData.categories.filter(c => c !== name);
+    MockData.categories = MockData.categories.filter(c => c.category_name !== name);
     loadAdminData();
     showToast("分类已删除。");
 }
@@ -1137,21 +1145,23 @@ function addCategory() {
     const input = document.getElementById("newCategory");
     const name = input.value.trim();
     if (!name) { showToast("请输入分类名称"); return; }
-    if (MockData.categories.includes(name)) { showToast("分类已存在"); return; }
-    MockData.categories.push(name);
+    if (MockData.categories.some(c => c.category_name === name)) { showToast("分类已存在"); return; }
+    const maxId = Math.max(...MockData.categories.map(c => c.category_id), 0);
+    MockData.categories.push({ category_id: maxId + 1, category_name: name, description: "" });
     input.value = "";
     loadAdminData();
     showToast("分类已添加。");
 }
 
 function saveBorrowRules() {
+    const readerType = document.getElementById("ruleReaderType")?.value || "本科生";
     const maxBorrowCount = Number(document.getElementById("maxBorrow")?.value) || 5;
     const maxBorrowDays = Number(document.getElementById("borrowDays")?.value) || 30;
     const finePerDay = Number(document.getElementById("overdueFee")?.value) || 0.5;
     const maxRenewTimes = Number(document.getElementById("maxRenewTimes")?.value) || 1;
     const renewDays = Number(document.getElementById("renewDays")?.value) || 15;
 
-    const rule = MockData.rules[0];
+    const rule = MockData.getRuleForType(readerType);
     if (rule) {
         rule.maxBorrowCount = maxBorrowCount;
         rule.maxBorrowDays = maxBorrowDays;
@@ -1159,8 +1169,7 @@ function saveBorrowRules() {
         rule.maxRenewTimes = maxRenewTimes;
         rule.renewDays = renewDays;
     }
-    loadAdminData();
-    showToast("借阅规则已保存。");
+    showToast(`「${readerType}」借阅规则已保存。`);
 }
 
 function backupData() {
@@ -1315,6 +1324,7 @@ window.editRole = editRole;
 window.deleteRole = deleteRole;
 window.deleteCategory = deleteCategory;
 window.addCategory = addCategory;
+window.loadRuleForType = loadRuleForType;
 window.saveBorrowRules = saveBorrowRules;
 window.backupData = backupData;
 window.restoreDemoData = restoreDemoData;

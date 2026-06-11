@@ -80,6 +80,16 @@
                         <h2>借阅规则设置</h2>
                         <span>配置借阅参数</span>
                     </div>
+                    <div class="toolbar">
+                        <label>读者类型
+                            <select id="ruleReaderType" onchange="loadRuleForType()">
+                                <option>本科生</option>
+                                <option>研究生</option>
+                                <option>教师</option>
+                                <option>校外人员</option>
+                            </select>
+                        </label>
+                    </div>
                     <div class="rule-row">
                         <label>最大借阅数量<input type="number" id="maxBorrow" min="1"></label>
                         <label>借阅天数<input type="number" id="borrowDays" min="1"></label>
