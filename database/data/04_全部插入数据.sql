@@ -194,3 +194,19 @@ INSERT INTO `user` (username, password, role, reader_id, create_time) VALUES
 ('zhengweiming', 'zwm12345', '读者', 15, '2018-03-01 08:00:00'),
 ('hexiaofang', 'hxf12345', '读者', 16, '2025-10-10 09:00:00'),
 ('qianxuelin', 'qxl12345', '读者', 17, '2025-11-01 10:00:00');
+
+-- =============================================
+-- 10. 邀请码测试数据 InviteCode
+-- =============================================
+INSERT INTO InviteCode (code, role, created_by, used_by, is_used, expire_time) VALUES
+-- 已使用的邀请码
+('ADMIN-2024-A1B2C3D4', '系统管理员', 1, 2, TRUE, '2025-12-31 23:59:59'),
+('LIB-2024-E5F6G7H8', '图书管理员', 1, 3, TRUE, '2025-12-31 23:59:59'),
+('READ-2024-I9J0K1L2', '读者', 1, 5, TRUE, '2025-06-30 23:59:59'),
+-- 未使用的有效邀请码
+('ADMIN-2026-M3N4O5P6', '系统管理员', 1, NULL, FALSE, '2026-12-31 23:59:59'),
+('LIB-2026-Q7R8S9T0', '图书管理员', 1, NULL, FALSE, '2026-12-31 23:59:59'),
+('READ-2026-U1V2W3X4', '读者', 1, NULL, FALSE, '2026-12-31 23:59:59'),
+('READ-2026-Y5Z6A7B8', '读者', 1, NULL, FALSE, '2026-12-31 23:59:59'),
+-- 已过期的邀请码
+('READ-2023-EXPIRED01', '读者', 1, NULL, FALSE, '2023-01-01 00:00:00');
