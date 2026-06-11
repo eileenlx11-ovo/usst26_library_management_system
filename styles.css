@@ -337,6 +337,9 @@ tr:last-child td { border-bottom: 0; }
 }
 .login-card h1 { margin-bottom: 0.5rem; }
 .login-card .small-text { margin-top: 1rem; color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
+.login-card .form-switch { text-align: center; }
+.login-card .form-switch a { color: var(--primary); font-weight: 700; text-decoration: none; }
+.login-card .form-switch a:hover { text-decoration: underline; }
 
 /* ==================== 弹窗 ==================== */
 .modal {

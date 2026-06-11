@@ -27,6 +27,86 @@ function login() {
 
 function logout() { clearSession(); window.location.href = "login.html"; }
 
+// ===================== 注册 =====================
+
+function showRegisterForm() {
+    document.getElementById("loginForm").style.display = "none";
+    document.getElementById("registerForm").style.display = "";
+    document.getElementById("regRole").value = "读者";
+    onRegRoleChange();
+}
+
+function showLoginForm() {
+    document.getElementById("registerForm").style.display = "none";
+    document.getElementById("loginForm").style.display = "";
+    // 清空注册表单
+    ["regUsername", "regPassword", "regPasswordConfirm", "regInviteCode"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+    });
+}
+
+function onRegRoleChange() {
+    const role = document.getElementById("regRole").value;
+    const inviteSection = document.getElementById("inviteCodeSection");
+    if (inviteSection) {
+        inviteSection.style.display = role === "读者" ? "none" : "";
+    }
+}
+
+function register() {
+    const role = document.getElementById("regRole").value;
+    const username = document.getElementById("regUsername").value.trim();
+    const password = document.getElementById("regPassword").value;
+    const passwordConfirm = document.getElementById("regPasswordConfirm").value;
+
+    // 基本校验
+    if (!username || !password) { showToast("用户名和密码不能为空。"); return; }
+    if (!/^[a-zA-Z0-9一-龥]{2,16}$/.test(username)) {
+        showToast("用户名需为2-16位字母、数字或中文。"); return;
+    }
+    if (password.length < 4) { showToast("密码长度不能少于4位。"); return; }
+    if (password !== passwordConfirm) { showToast("两次输入的密码不一致。"); return; }
+
+    // 检查用户名是否已存在
+    if (MockData.users.some(u => u.username === username)) {
+        showToast("该用户名已被占用，请换一个。"); return;
+    }
+
+    // 邀请码校验 —— 由系统管理员在admin页面动态管理
+    if (role !== "读者") {
+        const inviteCode = document.getElementById("regInviteCode").value.trim();
+        if (!inviteCode) { showToast(`注册"${role}"需要邀请码，请联系系统管理员获取。`); return; }
+        const result = MockData.validateInviteCode(inviteCode, role);
+        if (!result.valid) { showToast(result.reason); return; }
+        // 消费邀请码（增加使用次数）
+        MockData.consumeInviteCode(inviteCode, role);
+    }
+
+    // 注册成功
+    const users = MockData.users;
+    users.push({ username, password, role });
+    MockData.users = users;
+
+    showToast(`注册成功！欢迎，${role}「${username}」。`);
+    // 2秒后自动切回登录页
+    setTimeout(() => {
+        showLoginForm();
+        document.getElementById("loginUsername").value = username;
+        document.getElementById("loginPassword").value = "";
+        // 设置登录角色为注册角色
+        const loginRole = document.getElementById("loginRole");
+        if (loginRole) {
+            // 注册页面没有"系统管理员"选项，但登录页有
+            if (role === "系统管理员") {
+                loginRole.value = "系统管理员";
+            } else {
+                loginRole.value = role;
+            }
+        }
+    }, 2000);
+}
+
 // ===================== 角色权限 & 侧边栏 =====================
 
 /** 页面对应的最低角色要求 */
@@ -896,6 +976,69 @@ function loadReports() {
 
 // ==================== 系统安全（admin.html） ====================
 
+// --- 邀请码管理（仅系统管理员） ---
+
+function generateInviteCode() {
+    const role = document.getElementById("inviteCodeRole").value;
+    const maxUses = parseInt(document.getElementById("inviteCodeMaxUses").value) || 0;
+    const session = getSession();
+
+    // 生成 8 位随机大写字母数字
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 排除易混淆字符 I/O/0/1
+    let code = "";
+    for (let i = 0; i < 8; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+    }
+
+    const entry = {
+        id: MockData.nextInviteCodeId(),
+        code,
+        targetRole: role,
+        maxUses: maxUses,
+        usedCount: 0,
+        active: true,
+        createdBy: session ? session.username : "unknown",
+        createdAt: todayStr()
+    };
+
+    const codes = MockData.inviteCodes;
+    codes.push(entry);
+    MockData.inviteCodes = codes;
+    renderInviteCodeList();
+    showToast(`已生成邀请码：${code}（目标角色：${role}，最大使用次数：${maxUses > 0 ? maxUses : "不限"}）`);
+}
+
+function revokeInviteCode(codeId) {
+    const codes = MockData.inviteCodes;
+    const entry = codes.find(c => c.id === codeId);
+    if (!entry) return;
+    entry.active = !entry.active;
+    MockData.inviteCodes = codes;
+    renderInviteCodeList();
+    showToast(entry.active ? `邀请码 ${entry.code} 已重新激活` : `邀请码 ${entry.code} 已吊销`);
+}
+
+function renderInviteCodeList() {
+    const tbody = document.getElementById("inviteCodeListBody");
+    if (!tbody) return;
+    const codes = MockData.inviteCodes;
+    tbody.innerHTML = codes.length ? codes.map(c => `
+        <tr>
+            <td><code style="font-weight:700;letter-spacing:1px;">${escapeHtml(c.code)}</code></td>
+            <td>${escapeHtml(c.targetRole)}</td>
+            <td>${c.maxUses > 0 ? `${c.usedCount}/${c.maxUses}` : `${c.usedCount}/不限`}</td>
+            <td><span class="status ${c.active ? 'ok' : 'bad'}">${c.active ? '有效' : '已吊销'}</span></td>
+            <td>${escapeHtml(c.createdBy)}</td>
+            <td>${c.createdAt}</td>
+            <td>
+                <button class="small-btn ${c.active ? 'warning' : 'secondary'}" onclick="revokeInviteCode(${c.id})">
+                    ${c.active ? '吊销' : '恢复'}
+                </button>
+            </td>
+        </tr>`).join("")
+        : `<tr><td colspan="7" class="empty">暂无邀请码，请使用下方表单生成</td></tr>`;
+}
+
 function loadAdminData() {
     // 用户权限
     const roleBody = document.getElementById("roleListBody");
@@ -932,6 +1075,9 @@ function loadAdminData() {
             if (el) el.value = val;
         });
     }
+
+    // 邀请码列表
+    renderInviteCodeList();
 }
 
 function openRoleModal(username) {
@@ -1021,7 +1167,8 @@ function backupData() {
     const data = {
         books: MockData.books, readers: MockData.readers,
         borrowRecords: MockData.borrowRecords, fines: MockData.fines,
-        rules: MockData.rules, categories: MockData.categories, users: MockData.users
+        rules: MockData.rules, categories: MockData.categories,
+        users: MockData.users, inviteCodes: MockData.inviteCodes
     };
     localStorage.setItem("libraryBackup", JSON.stringify(data));
     showToast("数据已备份到本地存储。");
@@ -1040,6 +1187,7 @@ async function restoreDemoData() {
         MockData.rules = data.rules;
         MockData.categories = data.categories;
         MockData.users = data.users;
+        if (data.inviteCodes) MockData.inviteCodes = data.inviteCodes;
         showToast("数据已恢复。");
         loadAdminData();
     } catch (e) { showToast("恢复失败"); }
@@ -1132,6 +1280,10 @@ document.addEventListener("DOMContentLoaded", function () {
 // 全局函数暴露
 window.login = login;
 window.logout = logout;
+window.showRegisterForm = showRegisterForm;
+window.showLoginForm = showLoginForm;
+window.onRegRoleChange = onRegRoleChange;
+window.register = register;
 window.openProfileModal = openProfileModal;
 window.closeProfileModal = closeProfileModal;
 window.saveProfile = saveProfile;
@@ -1166,3 +1318,5 @@ window.addCategory = addCategory;
 window.saveBorrowRules = saveBorrowRules;
 window.backupData = backupData;
 window.restoreDemoData = restoreDemoData;
+window.generateInviteCode = generateInviteCode;
+window.revokeInviteCode = revokeInviteCode;

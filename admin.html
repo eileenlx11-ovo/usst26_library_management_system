@@ -105,6 +105,36 @@
                     </div>
                 </section>
             </div>
+
+            <!-- 邀请码管理（全宽面板） -->
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>🔑 邀请码管理</h2>
+                        <p>生成和吊销注册邀请码。读者注册无需邀请码，图书管理员和系统管理员注册需要有效的邀请码。</p>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <label>目标角色
+                        <select id="inviteCodeRole">
+                            <option>图书管理员</option>
+                            <option>系统管理员</option>
+                        </select>
+                    </label>
+                    <label>最大使用次数
+                        <input type="number" id="inviteCodeMaxUses" min="0" value="1" placeholder="0=不限" style="width:100px;">
+                    </label>
+                    <button class="primary-btn" onclick="generateInviteCode()">🎫 生成邀请码</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>邀请码</th><th>目标角色</th><th>使用量</th><th>状态</th><th>创建者</th><th>创建日期</th><th>操作</th></tr>
+                        </thead>
+                        <tbody id="inviteCodeListBody"></tbody>
+                    </table>
+                </div>
+            </section>
         </main>
     </div>
 

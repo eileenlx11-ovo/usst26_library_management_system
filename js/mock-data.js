@@ -64,6 +64,52 @@ const MockData = (function () {
         localStorage.setItem("libraryUsers", JSON.stringify(_users));
     }
 
+    // ===================== 邀请码 =====================
+    let _inviteCodes = loadInviteCodes();
+    let _nextInviteCodeId = (_inviteCodes.length > 0) ? Math.max(..._inviteCodes.map(c => c.id)) + 1 : 1;
+
+    function loadInviteCodes() {
+        const raw = localStorage.getItem("libraryInviteCodes");
+        if (raw) {
+            try { return JSON.parse(raw); } catch (e) { /* ignore */ }
+        }
+        // 种子邀请码 —— 仅首次使用时存在
+        return [
+            { id: 1, code: "LIB2024", targetRole: "图书管理员", maxUses: 10, usedCount: 0, active: true, createdBy: "system", createdAt: "2026-06-01" },
+            { id: 2, code: "LIBRARIAN", targetRole: "图书管理员", maxUses: 5, usedCount: 0, active: true, createdBy: "system", createdAt: "2026-06-01" },
+            { id: 3, code: "ADMIN2024", targetRole: "系统管理员", maxUses: 3, usedCount: 0, active: true, createdBy: "system", createdAt: "2026-06-01" }
+        ];
+    }
+
+    function saveInviteCodes() {
+        localStorage.setItem("libraryInviteCodes", JSON.stringify(_inviteCodes));
+    }
+
+    function validateInviteCode(code, role) {
+        const entry = _inviteCodes.find(c =>
+            c.code.toUpperCase() === code.toUpperCase() &&
+            c.targetRole === role &&
+            c.active === true
+        );
+        if (!entry) return { valid: false, reason: "邀请码无效或角色不匹配" };
+        if (entry.maxUses > 0 && entry.usedCount >= entry.maxUses) {
+            return { valid: false, reason: "该邀请码已达最大使用次数" };
+        }
+        return { valid: true, entry };
+    }
+
+    function consumeInviteCode(code, role) {
+        const entry = _inviteCodes.find(c =>
+            c.code.toUpperCase() === code.toUpperCase() &&
+            c.targetRole === role &&
+            c.active === true
+        );
+        if (entry) {
+            entry.usedCount += 1;
+            saveInviteCodes();
+        }
+    }
+
     // ===================== 辅助方法 =====================
 
     function getBook(id) { return _books.find(b => b.id === Number(id)); }
@@ -94,6 +140,13 @@ const MockData = (function () {
 
     // ===================== 暴露API =====================
     return {
+        // invite codes
+        get inviteCodes() { return _inviteCodes; },
+        set inviteCodes(v) { _inviteCodes = v; saveInviteCodes(); },
+        nextInviteCodeId() { return _nextInviteCodeId++; },
+        validateInviteCode,
+        consumeInviteCode,
+
         // getter/setter
         get books() { return _books; },
         set books(v) { _books = v; },
