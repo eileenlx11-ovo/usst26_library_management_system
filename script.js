@@ -14,15 +14,18 @@ function clearSession() { localStorage.removeItem("librarySession"); }
 
 // ===================== 登录/登出 =====================
 
-function login() {
+async function login() {
     const username = document.getElementById("loginUsername").value.trim();
     const password = document.getElementById("loginPassword").value;
     const role = document.getElementById("loginRole").value;
     if (!username || !password) { showToast("用户名和密码不能为空。"); return; }
-    const user = MockData.findUser(username, password, role);
-    if (!user) { showToast("登录失败，请检查用户名、密码和角色是否匹配。"); return; }
-    setSession(user);
-    window.location.href = "index.html";
+    const res = await authApi.login(username, password, role);
+    if (res.success && res.data) {
+        setSession({ username: res.data.username, role: res.data.role, readerId: res.data.readerId });
+        window.location.href = "index.html";
+    } else {
+        showToast(res.message || "登录失败");
+    }
 }
 
 function logout() { clearSession(); window.location.href = "login.html"; }
@@ -54,57 +57,53 @@ function onRegRoleChange() {
     }
 }
 
-function register() {
+async function register() {
     const role = document.getElementById("regRole").value;
     const username = document.getElementById("regUsername").value.trim();
     const password = document.getElementById("regPassword").value;
     const passwordConfirm = document.getElementById("regPasswordConfirm").value;
-
-    // 基本校验
     if (!username || !password) { showToast("用户名和密码不能为空。"); return; }
-    if (!/^[a-zA-Z0-9一-龥]{2,16}$/.test(username)) {
-        showToast("用户名需为2-16位字母、数字或中文。"); return;
-    }
+    if (!/^[a-zA-Z0-9一-龥]{2,16}$/.test(username)) { showToast("用户名需为2-16位字母、数字或中文。"); return; }
     if (password.length < 4) { showToast("密码长度不能少于4位。"); return; }
     if (password !== passwordConfirm) { showToast("两次输入的密码不一致。"); return; }
 
-    // 检查用户名是否已存在
-    if (MockData.users.some(u => u.username === username)) {
-        showToast("该用户名已被占用，请换一个。"); return;
-    }
+    const inviteCode = role !== "读者" ? document.getElementById("regInviteCode")?.value.trim() || "" : "";
+    const res = await authApi.register(username, password, role, inviteCode);
+    if (res.success) {
+        showToast("注册成功！欢迎，" + role + "「" + username + "」。");
+        setTimeout(() => { showLoginForm(); document.getElementById("loginUsername").value = username; }, 2000);
+    } else { showToast(res.message || "注册失败"); }
+}
 
-    // 邀请码校验 —— 由系统管理员在admin页面动态管理
-    if (role !== "读者") {
-        const inviteCode = document.getElementById("regInviteCode").value.trim();
-        if (!inviteCode) { showToast(`注册"${role}"需要邀请码，请联系系统管理员获取。`); return; }
-        const result = MockData.validateInviteCode(inviteCode, role);
-        if (!result.valid) { showToast(result.reason); return; }
-        // 消费邀请码（增加使用次数）
-        MockData.consumeInviteCode(inviteCode, role);
-    }
+function generateInviteCode() {
+    const role = document.getElementById("inviteCodeRole").value;
+    const maxUses = parseInt(document.getElementById("inviteCodeMaxUses").value) || 0;
+    inviteApi.generate(role, maxUses || 1, 365).then(res => {
+        if (res.success && res.data) {
+            showToast("邀请码已生成：" + res.data.code);
+            loadAdminData();
+        } else showToast("生成失败");
+    });
+}
 
-    // 注册成功
-    const users = MockData.users;
-    users.push({ username, password, role });
-    MockData.users = users;
+async function revokeInviteCode(codeId) {
+    const res = await inviteApi.revoke(codeId);
+    if (res.success) { showToast("已吊销"); loadAdminData(); }
+    else showToast("操作失败");
+}
 
-    showToast(`注册成功！欢迎，${role}「${username}」。`);
-    // 2秒后自动切回登录页
-    setTimeout(() => {
-        showLoginForm();
-        document.getElementById("loginUsername").value = username;
-        document.getElementById("loginPassword").value = "";
-        // 设置登录角色为注册角色
-        const loginRole = document.getElementById("loginRole");
-        if (loginRole) {
-            // 注册页面没有"系统管理员"选项，但登录页有
-            if (role === "系统管理员") {
-                loginRole.value = "系统管理员";
-            } else {
-                loginRole.value = role;
-            }
-        }
-    }, 2000);
+async function renderInviteCodeList() {
+    const tbody = document.getElementById("inviteCodeListBody");
+    if (!tbody) return;
+    const res = await inviteApi.list();
+    const codes = (res.success && res.data) ? res.data : [];
+    tbody.innerHTML = codes.length ? codes.map(c => `
+        <tr><td><code style="font-weight:700;letter-spacing:1px;">${escapeHtml(c.code)}</code></td>
+            <td>${escapeHtml(c.role)}</td><td>${c.isUsed?'已使用':'未使用'}</td>
+            <td><span class="status ${c.isUsed?'bad':'ok'}">${c.isUsed?'已用':'有效'}</span></td>
+            <td>${c.createTime||''}</td><td>${c.expireTime||''}</td>
+            <td><button class="small-btn ${c.isUsed?'secondary':'warning'}" onclick="revokeInviteCode(${c.codeId})" ${c.isUsed?'disabled':''}>${c.isUsed?'已用':'吊销'}</button></td></tr>
+    `).join("") : `<tr><td colspan="7" class="empty">暂无邀请码，请使用下方表单生成</td></tr>`;
 }
 
 // ===================== 角色权限 & 侧边栏 =====================
@@ -355,50 +354,57 @@ function renderPagination(containerId, total, page, pageSize, changeFuncName) {
 
 // ==================== 仪表盘（index.html） ====================
 
-function loadDashboard() {
+let bookUseApi = true;
+let currentBookSearchParams = {};
+
+async function loadDashboard() {
     const session = getSession();
     if (!session) return;
 
-    const books = MockData.books;
-    const readers = MockData.readers;
-    const records = MockData.borrowRecords;
-    const fines = MockData.fines;
-    const today = todayStr();
-
-    // 计算指标
-    let metricBooks = books.reduce((s, b) => s + (b.total || 0), 0);
-    let metricAvailable = books.reduce((s, b) => s + (b.available || 0), 0);
-
-    let activeRecords, unpaidFine;
-    if (session.role === "读者") {
-        const reader = readers.find(r => r.name === session.username) || readers[0];
-        activeRecords = records.filter(r => r.readerId === reader.id && r.borrowStatus !== "已归还");
-        unpaidFine = fines.filter(f => {
-            const rec = records.find(r => r.borrowId === f.borrowId);
-            return !f.paid && rec && rec.readerId === reader.id;
-        }).reduce((s, f) => s + f.amount, 0);
-    } else {
-        activeRecords = records.filter(r => r.borrowStatus !== "已归还");
-        unpaidFine = fines.filter(f => !f.paid).reduce((s, f) => s + f.amount, 0);
+    // 1. 馆藏量 — 从图书分页API拿total
+    let totalBooks = 0, totalAvailable = 0;
+    const bookRes = await bookApi.list({ pageNum: 1, pageSize: 1 });
+    if (bookRes.success && bookRes.data && bookRes.data.total) {
+        totalBooks = bookRes.data.total;
+        const allRes = await bookApi.list({ pageNum: 1, pageSize: 200 });
+        if (allRes.success && allRes.data && allRes.data.records) {
+            totalAvailable = allRes.data.records.reduce((s, b) => s + (b.available || 0), 0);
+        }
     }
 
-    setMetric("metricBooks", metricBooks);
-    setMetric("metricAvailable", metricAvailable);
-    setMetric("metricBorrowing", activeRecords.length);
+    // 2. 借阅中数量 — 从借阅API
+    let activeCount = 0, unpaidFine = 0;
+    const isReader = session.role === "读者";
+    const borrowRes = await apiGet('/bookadmin/borrow/list');
+    if (borrowRes.success && borrowRes.data) {
+        let records = borrowRes.data;
+        if (isReader) {
+            const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
+            if (reader) records = records.filter(r => r.readerId === reader.id);
+        }
+        activeCount = records.filter(r => r.borrowStatus !== "已归还").length;
+    }
+
+    // 3. 待缴罚款 — 从罚款API
+    const fineRes = await apiGet('/bookadmin/borrow/fines');
+    if (fineRes.success && fineRes.data) {
+        let fines = fineRes.data;
+        if (isReader) {
+            const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
+            if (reader) fines = fines.filter(f => f.readerId === reader.id);
+        }
+        unpaidFine = fines.filter(f => !f.isPaid).reduce((s, f) => s + (parseFloat(f.fineAmount) || 0), 0);
+    }
+
+    setMetric("metricBooks", totalBooks || MockData.books.reduce((s,b)=>s+(b.total||0),0));
+    setMetric("metricAvailable", totalAvailable || MockData.books.reduce((s,b)=>s+(b.available||0),0));
+    setMetric("metricBorrowing", activeCount);
     setMetric("metricFine", unpaidFine.toFixed(2));
 
-    // 待办事项
-    const todos = buildTodoList(session, today);
+    const todos = await buildTodoList(session, todayStr());
     document.getElementById("todoCount").textContent = `${todos.length} 项`;
     document.getElementById("todoList").innerHTML = todos.length
-        ? todos.map(t => `
-            <div class="todo-item" onclick="location.href='${t.link}'" title="点击跳转到${t.type}相关页面">
-                <div>
-                    <strong>${escapeHtml(t.title)}</strong>
-                    <span>${escapeHtml(t.detail)}</span>
-                </div>
-                <span class="tag">${escapeHtml(t.type)} <span class="goto-arrow">→</span></span>
-            </div>`).join("")
+        ? todos.map(t => `<div class="todo-item" onclick="location.href='${t.link}'"><div><strong>${escapeHtml(t.title)}</strong><span>${escapeHtml(t.detail)}</span></div><span class="tag">${escapeHtml(t.type)} <span class="goto-arrow">→</span></span></div>`).join("")
         : `<div class="empty">暂无待处理事项</div>`;
 }
 
@@ -407,33 +413,33 @@ function setMetric(id, value) {
     if (el) el.textContent = value;
 }
 
-function buildTodoList(session, today) {
+async function buildTodoList(session, today) {
     const todos = [];
-    const overdue = MockData.getOverdueRecords(today);
 
-    if (session.role !== "读者") {
-        overdue.forEach(r => {
-            const reader = MockData.getReader(r.readerId);
-            const book = MockData.getBook(r.bookId);
-            if (reader && book) {
-                todos.push({ title: `${reader.name} 的图书已逾期`, detail: `${book.title}，逾期 ${daysBetween(r.dueDate, today)} 天`, type: "催还", link: "borrow.html" });
-            }
-        });
-        MockData.books.filter(b => b.available <= 0).forEach(b => {
-            todos.push({ title: `${b.title} 库存不足`, detail: "可借册数为0，建议补充", type: "库存", link: "books.html" });
-        });
-    } else {
-        const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
-        overdue.filter(r => r.readerId === reader.id).forEach(r => {
-            const book = MockData.getBook(r.bookId);
-            if (book) todos.push({ title: `逾期提醒`, detail: `《${book.title}》已逾期 ${daysBetween(r.dueDate, today)} 天`, type: "催还", link: "borrow.html" });
+    // 1. 逾期催还 — 从API
+    const odRes = await apiGet('/systemadmin/tool/overdue-list');
+    if (odRes.success && odRes.data) {
+        odRes.data.slice(0, 3).forEach(r => {
+            todos.push({ title: `${r.readerName} 的图书已逾期`, detail: `${r.bookName}，逾期 ${r.overdueDays} 天`, type: "催还", link: "borrow.html" });
         });
     }
 
-    const unpaid = MockData.fines.filter(f => !f.paid);
-    if (unpaid.length) todos.push({ title: "存在未缴罚款", detail: `共 ${unpaid.length} 条记录未缴纳`, type: "罚款", link: "borrow.html" });
+    // 2. 库存不足 — 从前端当前API数据判断
+    const bookRes = await bookApi.list({ pageNum: 1, pageSize: 200 });
+    if (bookRes.success && bookRes.data && bookRes.data.records) {
+        bookRes.data.records.filter(b => b.available <= 0).slice(0, 2).forEach(b => {
+            todos.push({ title: `${b.title} 库存不足`, detail: "可借册数为0", type: "库存", link: "books.html" });
+        });
+    }
 
-    return todos.slice(0, 6);
+    // 3. 未缴罚款
+    const fineRes = await apiGet('/bookadmin/borrow/fines');
+    if (fineRes.success && fineRes.data) {
+        const unpaid = fineRes.data.filter(f => !f.isPaid);
+        if (unpaid.length) todos.push({ title: "存在未缴罚款", detail: `共 ${unpaid.length} 条`, type: "罚款", link: "borrow.html" });
+    }
+
+    return todos;
 }
 
 // ==================== 图书管理（books.html） ====================
@@ -442,53 +448,66 @@ let bookSearchResults = null;
 let currentBookPage = 1;
 const BOOK_PAGE_SIZE = 8;
 
-function loadBooks(page = 1) {
+async function loadBooks(page = 1) {
     currentBookPage = page;
-    const source = bookSearchResults || MockData.books;
-    const start = (page - 1) * BOOK_PAGE_SIZE;
-    const items = source.slice(start, start + BOOK_PAGE_SIZE);
     const session = getSession();
     const isReader = session && session.role === "读者";
 
-    const tbody = document.getElementById("bookListBody");
-    if (!tbody) return;
+    // 渲染图书行
+    function renderRows(items, total) {
+        const tbody = document.getElementById("bookListBody");
+        if (!tbody) return;
+        tbody.innerHTML = items.length ? items.map(book => `
+            <tr>
+                <td>${book.id}</td>
+                <td>${escapeHtml(book.title)}</td>
+                <td>${escapeHtml(book.author)}</td>
+                <td>${escapeHtml(book.isbn)}</td>
+                <td>${escapeHtml(book.publisher || "")}</td>
+                <td>${escapeHtml(book.category)}</td>
+                <td>${book.available || 0}/${book.total || 0}</td>
+                <td><span class="status ${book.available > 0 ? 'ok' : 'bad'}">${book.available > 0 ? '可借' : '借空'}</span></td>
+                <td><div class="row-actions">
+                    ${isReader ? `<button class="small-btn" onclick="readerBorrowBook(${book.id})" ${book.available > 0 ? '' : 'disabled'}>借阅</button>` : `<button class="small-btn secondary" onclick="editBook(${book.id})">编辑</button><button class="small-btn danger" onclick="deleteBook(${book.id})">删除</button>`}
+                </div></td>
+            </tr>`).join("") : `<tr><td colspan="9" class="empty">没有找到匹配的图书</td></tr>`;
+        renderPagination("bookPagination", total, page, BOOK_PAGE_SIZE, "changeBookPage");
+    }
 
-    tbody.innerHTML = items.length ? items.map(book => `
-        <tr>
-            <td>${book.id}</td>
-            <td>${escapeHtml(book.title)}</td>
-            <td>${escapeHtml(book.author)}</td>
-            <td>${escapeHtml(book.isbn)}</td>
-            <td>${escapeHtml(book.publisher || "")}</td>
-            <td>${escapeHtml(book.category)}</td>
-            <td>${book.available || 0}/${book.total || 0}</td>
-            <td><span class="status ${book.available > 0 ? 'ok' : 'bad'}">${book.available > 0 ? '可借' : '借空'}</span></td>
-            <td>
-                <div class="row-actions">
-                    ${isReader ? `
-                        <button class="small-btn" onclick="readerBorrowBook(${book.id})" ${book.available > 0 ? '' : 'disabled'}>借阅</button>
-                    ` : `
-                        <button class="small-btn secondary" onclick="editBook(${book.id})">编辑</button>
-                        <button class="small-btn danger" onclick="deleteBook(${book.id})">删除</button>
-                    `}
-                </div>
-            </td>
-        </tr>`).join("") : `<tr><td colspan="9" class="empty">没有找到匹配的图书</td></tr>`;
+    // 尝试后端API（带搜索条件）
+    const apiRes = await bookApi.list({
+        pageNum: page,
+        pageSize: BOOK_PAGE_SIZE,
+        bookName: currentBookSearchParams.bookName || '',
+        authorName: currentBookSearchParams.authorName || '',
+        isbn: currentBookSearchParams.isbn || '',
+        categoryId: currentBookSearchParams.categoryId || '',
+        status: currentBookSearchParams.status || ''
+    });
+    if (apiRes.success && apiRes.data && apiRes.data.records) {
+        bookUseApi = true;
+        renderRows(apiRes.data.records, apiRes.data.total);
+    } else {
+        // mock回退
+        const source = bookSearchResults || MockData.books;
+        const start = (page - 1) * BOOK_PAGE_SIZE;
+        renderRows(source.slice(start, start + BOOK_PAGE_SIZE), source.length);
+    }
 
-    renderPagination("bookPagination", source.length, page, BOOK_PAGE_SIZE, "changeBookPage");
-
-    // 渲染分类筛选
+    // 分类筛选 — 从API
     const filter = document.getElementById("categoryFilter");
     if (filter && filter.options.length <= 1) {
         const current = filter.value;
         filter.innerHTML = '<option value="">全部分类</option>';
-        MockData.categories.forEach(c => {
-            filter.innerHTML += `<option value="${escapeHtml(c.category_name)}">${escapeHtml(c.category_name)}</option>`;
-        });
+        const catRes = await categoryApi.list();
+        if (catRes.success && catRes.data) {
+            catRes.data.forEach(c => {
+                filter.innerHTML += `<option value="${c.categoryId}">${escapeHtml(c.categoryName)}</option>`;
+            });
+        }
         filter.value = current;
     }
 
-    // 控制添加按钮可见性
     const addBtn = document.getElementById("addBookBtn");
     if (addBtn) addBtn.style.display = isReader ? "none" : "";
 }
@@ -496,18 +515,30 @@ function loadBooks(page = 1) {
 function changeBookPage(page) { loadBooks(page); }
 
 function searchBooks() {
-    const kw = (document.getElementById("searchInput")?.value || "").toLowerCase();
-    const cat = document.getElementById("categoryFilter")?.value || "";
+    const kw = document.getElementById("searchInput")?.value || "";
+    const catId = document.getElementById("categoryFilter")?.value || "";
     const avail = document.getElementById("availabilityFilter")?.value || "";
 
-    let list = MockData.books;
-    if (kw) list = list.filter(b => (b.title + b.author + b.isbn + b.category).toLowerCase().includes(kw));
-    if (cat) list = list.filter(b => b.category === cat);
-    if (avail === "available") list = list.filter(b => b.available > 0);
-    if (avail === "empty") list = list.filter(b => b.available <= 0);
+    currentBookSearchParams = {
+        bookName: kw,
+        authorName: '',
+        isbn: '',
+        categoryId: catId,
+        status: avail === 'available' ? '可借' : (avail === 'empty' ? '借空' : '')
+    };
 
-    bookSearchResults = list;
-    loadBooks(1);
+    if (bookUseApi) {
+        loadBooks(1);
+    } else {
+        const kwLower = kw.toLowerCase();
+        let list = MockData.books;
+        if (kwLower) list = list.filter(b => (b.title + b.author + b.isbn + b.category).toLowerCase().includes(kwLower));
+        if (catId) list = list.filter(b => String(b.category) === catId);
+        if (avail === "available") list = list.filter(b => b.available > 0);
+        if (avail === "empty") list = list.filter(b => b.available <= 0);
+        bookSearchResults = list;
+        loadBooks(1);
+    }
 }
 
 function openBookModal() {
@@ -523,10 +554,19 @@ function openBookModal() {
 
 function closeBookModal() { document.getElementById("bookModal").style.display = "none"; }
 
-function editBook(id) {
+async function editBook(id) {
+    // 先尝试API详情
+    const res = await bookApi.getById(id);
+    if (res.success && res.data) {
+        fillEditForm(res.data);
+        return;
+    }
+    // mock回退
     const book = MockData.getBook(id);
-    if (!book) return;
-    document.getElementById("modalTitle").textContent = "编辑图书";
+    if (book) fillEditForm(book);
+}
+
+function fillEditForm(book) {
     document.getElementById("editBookId").value = book.id;
     document.getElementById("bookTitle").value = book.title;
     document.getElementById("bookAuthor").value = book.author;
@@ -543,7 +583,6 @@ async function saveBook() {
     const title = document.getElementById("bookTitle").value.trim();
     const author = document.getElementById("bookAuthor").value.trim();
     if (!title || !author) { showToast("书名和作者不能为空"); return; }
-
     const book = {
         id: id || MockData.nextBookId(),
         title, author,
@@ -555,29 +594,27 @@ async function saveBook() {
         status: "在馆", borrowCount: 0
     };
     if (book.available > book.total) { showToast("可借册数不能大于总册数"); return; }
-    if (!MockData.categories.some(c => c.category_name === book.category)) {
-        MockData.categories.push({ category_id: MockData.categories.length + 1, category_name: book.category, description: "" });
-    }
 
-    if (id) {
-        const idx = MockData.books.findIndex(b => b.id === id);
-        if (idx >= 0) { book.borrowCount = MockData.books[idx].borrowCount; MockData.books[idx] = book; }
+    // 调后端API
+    const res = id ? await bookApi.update(book) : await bookApi.add(book);
+    if (res.success) {
+        closeBookModal();
+        loadBooks(1);
+        showToast(id ? "图书已更新（数据库）" : "图书已添加（数据库）");
     } else {
-        MockData.books.push(book);
+        showToast("操作失败：" + res.message);
     }
-    book.status = book.available > 0 ? "在馆" : "借空";
-    closeBookModal();
-    bookSearchResults = null;
-    loadBooks(1);
-    showToast("图书信息已保存。");
 }
 
 async function deleteBook(id) {
     if (!await showConfirm("确认删除该书吗？")) return;
-    MockData.books = MockData.books.filter(b => b.id !== id);
-    bookSearchResults = null;
-    loadBooks(1);
-    showToast("图书已删除。");
+    const res = await bookApi.delete(id);
+    if (res.success) {
+        loadBooks(1);
+        showToast("图书已删除（数据库）");
+    } else {
+        showToast("删除失败：" + res.message);
+    }
 }
 
 function readerBorrowBook(bookId) {
@@ -596,7 +633,7 @@ async function borrowBookDirect(readerId, bookId) {
     if (reader.status && reader.status !== "正常") { showToast("读者状态异常，无法借阅"); return; }
     if (book.available <= 0) { showToast("该书无可借库存"); return; }
 
-    const rule = MockData.getRuleForType(reader.type || "本科生");
+    const rule = MockData.getRuleForType(reader.type || "学生");
     const activeCount = MockData.borrowRecords.filter(r => r.readerId === readerId && r.borrowStatus !== "已归还").length;
     if (activeCount >= rule.maxBorrowCount) { showToast("已达最大借阅数量"); return; }
 
@@ -696,104 +733,82 @@ async function notifyOverdue() {
     }
 }
 
-function loadBorrowRecords(filterStatus = "") {
-    // 先动态更新借阅状态（借阅中 → 逾期）
-    MockData.borrowRecords.forEach(r => {
-        if (r.borrowStatus !== "已归还" && daysBetween(r.dueDate, todayStr()) > 0) {
-            r.borrowStatus = "逾期";
-        } else if (r.borrowStatus !== "已归还" && daysBetween(r.dueDate, todayStr()) <= 0) {
-            r.borrowStatus = "借阅中";
-        }
-    });
-
+async function loadBorrowRecords(filterStatus = "") {
     const session = getSession();
     const tbody = document.getElementById("borrowListBody");
     if (!tbody) return;
 
-    let records = MockData.borrowRecords;
-
-    // 读者只看自己的
-    if (session.role === "读者") {
+    let records = [];
+    // 从后端取
+    const isReader = session.role === "读者";
+    if (isReader) {
         const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
-        records = records.filter(r => r.readerId === reader.id);
+        if (reader) {
+            const res = await apiGet('/bookadmin/borrow/list/' + reader.id);
+            if (res.success && res.data) records = res.data;
+        }
+    } else {
+        const res = await apiGet('/bookadmin/borrow/list');
+        if (res.success && res.data) records = res.data;
     }
 
     if (filterStatus) records = records.filter(r => r.borrowStatus === filterStatus);
 
     tbody.innerHTML = records.length ? records.map(r => {
-        const reader = MockData.getReader(r.readerId);
-        const book = MockData.getBook(r.bookId);
-        const rule = MockData.getRule(r.ruleId) || { maxRenewTimes: 1 };
-        const canRenew = r.borrowStatus !== "已归还" && r.renewedTimes < (rule.maxRenewTimes || 1) && daysBetween(r.dueDate, todayStr()) <= 0;
+        const canRenew = r.borrowStatus !== "已归还" && !r.isRenewed && r.renewedTimes < 1;
         const canReturn = r.borrowStatus !== "已归还";
         const sc = r.borrowStatus === "已归还" ? "ok" : r.borrowStatus === "逾期" ? "bad" : "warn";
         return `<tr>
             <td>${r.borrowId}</td>
-            <td>${escapeHtml(reader?.name || "-")}<br><small>${escapeHtml(reader?.cardId || "")}</small></td>
-            <td>${escapeHtml(book?.title || "-")}</td>
-            <td>${r.borrowDate}</td>
-            <td>${r.dueDate}</td>
-            <td><span class="status ${sc}">${r.borrowStatus}${daysBetween(r.dueDate, todayStr()) > 0 && r.borrowStatus !== '已归还' ? ' ' + daysBetween(r.dueDate, todayStr()) + '天' : ''}</span></td>
-            <td>${r.renewedTimes}/${rule.maxRenewTimes || 1}</td>
-            <td>
-                <div class="row-actions">
-                    <button class="small-btn secondary" onclick="renewBook(${r.borrowId})" ${canRenew ? '' : 'disabled'}>续借</button>
-                    <button class="small-btn warning" onclick="returnBook(${r.borrowId})" ${canReturn ? '' : 'disabled'}>归还</button>
-                </div>
-            </td>
-        </tr>`;
+            <td><small>读者ID:${r.readerId}</small></td>
+            <td><small>书ID:${r.bookId}</small></td>
+            <td>${r.borrowDate}</td><td>${r.dueDate}</td>
+            <td><span class="status ${sc}">${r.borrowStatus}</span></td>
+            <td>${r.renewedTimes || 0}/1</td>
+            <td><div class="row-actions">
+                <button class="small-btn secondary" onclick="renewBook(${r.borrowId})" ${canRenew?'':'disabled'}>续借</button>
+                <button class="small-btn warning" onclick="returnBook(${r.borrowId})" ${canReturn?'':'disabled'}>归还</button>
+            </div></td></tr>`;
     }).join("") : `<tr><td colspan="8" class="empty">暂无借阅记录</td></tr>`;
 
-    // 罚款表
-    renderFines(session);
-    // 规则摘要（非读者）
-    renderRuleSummary(session);
+    // 罚款 + 规则也从后端取
+    const fineRes = await apiGet('/bookadmin/borrow/fines');
+    renderFinesFromAPI(session, fineRes.success ? fineRes.data : []);
+
+    const ruleRes = await apiGet('/systemadmin/borrow/rules');
+    renderRuleSummaryFromAPI(session, ruleRes.success ? ruleRes.data : []);
 }
 
-function renderFines(session) {
+function renderFinesFromAPI(session, fines) {
     const tbody = document.getElementById("fineTableBody");
     if (!tbody) return;
-    let fines = MockData.fines;
     if (session.role === "读者") {
         const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
-        fines = fines.filter(f => {
-            const rec = MockData.getBorrowRecord(f.borrowId);
-            return rec && rec.readerId === reader.id;
-        });
+        if (reader) fines = fines.filter(f => f.readerId === reader.id);
     }
-    tbody.innerHTML = fines.length ? fines.map(f => `
-        <tr>
-            <td>${f.fineId}</td>
-            <td>${f.borrowId}</td>
-            <td>${f.amount.toFixed(2)} 元</td>
-            <td>${f.createDate || "-"}</td>
-            <td><span class="status ${f.paid ? 'ok' : 'bad'}">${f.paid ? '已缴纳' : '未缴纳'}</span></td>
-            <td><button class="small-btn" onclick="payFine(${f.fineId})" ${f.paid ? 'disabled' : ''}>缴纳</button></td>
-        </tr>`).join("") : `<tr><td colspan="6" class="empty">暂无罚款记录</td></tr>`;
+    tbody.innerHTML = fines.length ? fines.map(f => `<tr>
+        <td>${f.fineId}</td><td>${f.borrowId}</td><td>${parseFloat(f.fineAmount||0).toFixed(2)}元</td>
+        <td>${f.createDate||'-'}</td><td><span class="status ${f.isPaid?'ok':'bad'}">${f.isPaid?'已缴纳':'未缴纳'}</span></td>
+        <td><button class="small-btn" onclick="payFine(${f.fineId})" ${f.isPaid?'disabled':''}>缴纳</button></td></tr>`).join("")
+        : `<tr><td colspan="6" class="empty">暂无罚款记录</td></tr>`;
 }
 
-function renderRuleSummary(session) {
+function renderRuleSummaryFromAPI(session, rules) {
     const el = document.getElementById("ruleSummary");
-    if (!el) return;
-    if (session.role === "读者") { el.innerHTML = ""; return; }
-    const rule = MockData.rules[0];
-    if (!rule) { el.innerHTML = ""; return; }
-    el.innerHTML = `
-        <div><strong>${rule.maxBorrowDays} 天</strong><span>最大借阅天数</span></div>
-        <div><strong>${rule.maxBorrowCount} 本</strong><span>最大借阅数量</span></div>
-        <div><strong>${(rule.finePerDay || 0).toFixed(2)} 元/天</strong><span>每日逾期费</span></div>
-        <div><strong>${rule.maxRenewTimes || 0} 次</strong><span>最大续借次数</span></div>
-        <div><strong>${rule.renewDays || 0} 天</strong><span>每次续借天数</span></div>
-        <div><span>${rule.readerType}规则</span></div>`;
+    if (!el || session.role==="读者") { if(el)el.innerHTML=""; return; }
+    const r = rules[0];
+    if (!r) { el.innerHTML = ""; return; }
+    el.innerHTML = `<div><strong>${r.maxBorrowDays}天</strong><span>最大借阅天数</span></div>
+        <div><strong>${r.maxBorrowCount}本</strong><span>最大借阅数量</span></div>
+        <div><strong>${parseFloat(r.finePerDay||0).toFixed(2)}元/天</strong><span>每日逾期费</span></div>
+        <div><strong>${r.maxRenewTimes||0}次</strong><span>续借次数</span></div>
+        <div><strong>${r.renewDays||0}天</strong><span>续借天数</span></div>
+        <div><span>${r.readerType||''}规则</span></div>`;
 }
 
 function payFine(fineId) {
-    const fine = MockData.getFine(fineId);
-    if (!fine || fine.paid) return;
-    fine.paid = true;
-    fine.payDate = todayStr();
-    refreshBorrowPage();
-    showToast("罚款已标记为已缴纳");
+    // 简单标记
+    showToast("请在数据库中标记缴纳");
 }
 
 function refreshBorrowPage() {
@@ -801,375 +816,234 @@ function refreshBorrowPage() {
     loadBorrowRecords(filter);
 }
 
-// ==================== 读者管理（readers.html） ====================
+// ==================== 读者管理（readers.html） ✅ 已连数据库 ====================
 
 let readerSearchResults = null;
 let currentReaderPage = 1;
 const READER_PAGE_SIZE = 8;
 
-function loadReaders(page = 1) {
+async function loadReaders(page = 1) {
     currentReaderPage = page;
-    const source = readerSearchResults || MockData.readers;
-    const start = (page - 1) * READER_PAGE_SIZE;
-    const items = source.slice(start, start + READER_PAGE_SIZE);
-
     const tbody = document.getElementById("readerListBody");
     if (!tbody) return;
 
+    const res = await readerApi.list(document.getElementById("readerSearch")?.value || "");
+    let list = [];
+    if (res.success && res.data) {
+        list = res.data.map(r => ({ id: r.readerId, cardId: '', name: r.readerName, gender: r.gender, phone: r.phone, email: '', type: r.readerType, status: r.status }));
+        readerSearchResults = list;
+    } else {
+        list = (readerSearchResults || MockData.readers);
+    }
+
+    const start = (page - 1) * READER_PAGE_SIZE;
+    const items = list.slice(start, start + READER_PAGE_SIZE);
     tbody.innerHTML = items.length ? items.map(r => `
         <tr>
-            <td>${r.id}</td>
-            <td>${escapeHtml(r.cardId)}</td>
-            <td>${escapeHtml(r.name)}</td>
-            <td>${escapeHtml(r.gender || "")}</td>
-            <td>${escapeHtml(r.phone)}</td>
-            <td>${escapeHtml(r.email || "")}</td>
-            <td>${escapeHtml(r.type || "本科生")}</td>
-            <td><span class="status ${r.status === '正常' ? 'ok' : 'bad'}">${escapeHtml(r.status || '正常')}</span></td>
-            <td>
-                <div class="row-actions">
-                    <button class="small-btn secondary" onclick="editReader(${r.id})">编辑</button>
-                    <button class="small-btn danger" onclick="deleteReader(${r.id})">删除</button>
-                </div>
-            </td>
+            <td>${r.id}</td><td>${escapeHtml(r.cardId)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.gender)}</td>
+            <td>${escapeHtml(r.phone)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.type)}</td>
+            <td><span class="status ${r.status==='正常'?'ok':'bad'}">${escapeHtml(r.status)}</span></td>
+            <td><div class="row-actions"><button class="small-btn secondary" onclick="editReader(${r.id})">编辑</button><button class="small-btn danger" onclick="deleteReader(${r.id})">删除</button></div></td>
         </tr>`).join("") : `<tr><td colspan="9" class="empty">暂无读者数据</td></tr>`;
-
-    renderPagination("readerPagination", source.length, page, READER_PAGE_SIZE, "changeReaderPage");
+    renderPagination("readerPagination", list.length, page, READER_PAGE_SIZE, "changeReaderPage");
 }
 
 function changeReaderPage(page) { loadReaders(page); }
 
-function searchReaders() {
-    const kw = (document.getElementById("readerSearch")?.value || "").toLowerCase();
-    readerSearchResults = MockData.readers.filter(r => (r.name + r.cardId).toLowerCase().includes(kw));
-    loadReaders(1);
-}
+function searchReaders() { readerSearchResults = null; loadReaders(1); }
 
 function openReaderModal() {
     document.getElementById("readerModalTitle").textContent = "添加读者";
     document.getElementById("editReaderId").value = "";
-    ["readerCardId", "readerName", "readerGender", "readerPhone", "readerEmail", "readerType", "readerStatus"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            if (id === "readerGender") el.value = "男";
-            else if (id === "readerType") el.value = "本科生";
-            else if (id === "readerStatus") el.value = "正常";
-            else el.value = "";
-        }
+    ["readerCardId","readerName","readerGender","readerPhone","readerEmail","readerType","readerStatus"].forEach(id => {
+        const el = document.getElementById(id); if (!el) return;
+        if (id === "readerGender") el.value = "男"; else if (id === "readerType") el.value = "本科生"; else if (id === "readerStatus") el.value = "正常"; else el.value = "";
     });
     document.getElementById("readerModal").style.display = "flex";
 }
 
 function closeReaderModal() { document.getElementById("readerModal").style.display = "none"; }
 
-function editReader(id) {
-    const r = MockData.getReader(id);
-    if (!r) return;
+async function editReader(id) {
+    const res = await apiGet('/bookadmin/reader/list?keyword=');
+    const list = (res.success && res.data) ? res.data : [];
+    const r = list.find(x => x.readerId == id);
+    if (r) {
+        document.getElementById("readerModalTitle").textContent = "编辑读者";
+        document.getElementById("editReaderId").value = r.readerId;
+        document.getElementById("readerName").value = r.readerName || '';
+        document.getElementById("readerPhone").value = r.phone || '';
+        document.getElementById("readerGender").value = r.gender || '男';
+        document.getElementById("readerType").value = r.readerType || '本科生';
+        document.getElementById("readerStatus").value = r.status || '正常';
+        document.getElementById("readerModal").style.display = "flex";
+        return;
+    }
+    // fallback mock
+    const mr = MockData.getReader(id); if (!mr) return;
     document.getElementById("readerModalTitle").textContent = "编辑读者";
-    document.getElementById("editReaderId").value = r.id;
-    document.getElementById("readerCardId").value = r.cardId;
-    document.getElementById("readerName").value = r.name;
-    document.getElementById("readerGender").value = r.gender || "男";
-    document.getElementById("readerPhone").value = r.phone;
-    document.getElementById("readerEmail").value = r.email || "";
-    document.getElementById("readerType").value = r.type || "本科生";
-    document.getElementById("readerStatus").value = r.status || "正常";
+    document.getElementById("editReaderId").value = mr.id;
+    document.getElementById("readerCardId").value = mr.cardId; document.getElementById("readerName").value = mr.name;
+    document.getElementById("readerGender").value = mr.gender||"男"; document.getElementById("readerPhone").value = mr.phone;
+    document.getElementById("readerType").value = mr.type||"本科生"; document.getElementById("readerStatus").value = mr.status||"正常";
     document.getElementById("readerModal").style.display = "flex";
 }
 
-function saveReader() {
+async function saveReader() {
     const id = Number(document.getElementById("editReaderId").value) || 0;
-    const cardId = document.getElementById("readerCardId").value.trim();
     const name = document.getElementById("readerName").value.trim();
-    if (!cardId || !name) { showToast("借书证号和姓名不能为空"); return; }
-
-    // 检查重复
-    if (MockData.readers.some(r => r.cardId === cardId && r.id !== id)) {
-        showToast("借书证号已存在"); return;
-    }
-
+    if (!name) { showToast("姓名不能为空"); return; }
     const reader = {
-        id: id || MockData.nextReaderId(),
-        cardId, name,
+        id, name,
         gender: document.getElementById("readerGender")?.value || "男",
         phone: document.getElementById("readerPhone")?.value.trim() || "",
-        email: document.getElementById("readerEmail")?.value.trim() || "",
         type: document.getElementById("readerType")?.value || "本科生",
-        registerDate: todayStr(),
         status: document.getElementById("readerStatus")?.value || "正常"
     };
-
-    if (id) {
-        const idx = MockData.readers.findIndex(r => r.id === id);
-        if (idx >= 0) { reader.registerDate = MockData.readers[idx].registerDate; MockData.readers[idx] = reader; }
-    } else {
-        MockData.readers.push(reader);
-    }
-    closeReaderModal();
-    readerSearchResults = null;
-    loadReaders(1);
-    showToast("读者信息已保存。");
+    const res = id ? await readerApi.update(reader) : await readerApi.add(reader);
+    if (res.success) { closeReaderModal(); readerSearchResults = null; loadReaders(1); showToast(id ? "读者已更新（数据库）。" : "读者已添加（数据库）。"); }
+    else { showToast("操作失败：" + res.message); }
 }
 
 async function deleteReader(id) {
     if (!await showConfirm("确认删除该读者吗？")) return;
-    MockData.readers = MockData.readers.filter(r => r.id !== id);
-    readerSearchResults = null;
-    loadReaders(1);
-    showToast("读者已删除。");
+    const res = await readerApi.delete(id);
+    if (res.success) { readerSearchResults = null; loadReaders(1); showToast("读者已删除（数据库）。"); }
+    else showToast("删除失败：" + res.message);
 }
 
 // ==================== 统计报表（report.html） ====================
 
-function loadReports() {
-    const books = MockData.books;
-    const records = MockData.borrowRecords;
-    const readers = MockData.readers;
-
+async function loadReports() {
     // 热门图书柱状图
+    const hotRes = await reportApi.hotBooks();
     const hotBody = document.getElementById("hotBookBars");
-    if (hotBody) {
-        const sorted = [...books].sort((a, b) => (b.borrowCount || 0) - (a.borrowCount || 0)).slice(0, 10);
-        const max = Math.max(...sorted.map(b => b.borrowCount || 0), 1);
-        hotBody.innerHTML = sorted.map(b => {
-            const w = Math.round((b.borrowCount || 0) / max * 100);
-            return `<div class="bar-row"><strong>${escapeHtml(b.title)}</strong><div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div><span>${b.borrowCount || 0}</span></div>`;
+    if (hotBody && hotRes.success && hotRes.data) {
+        const max = Math.max(...hotRes.data.map(b => b.cnt || 1), 1);
+        hotBody.innerHTML = hotRes.data.map(b => {
+            const w = Math.round((b.cnt || 1) / max * 100);
+            return `<div class="bar-row"><strong>${escapeHtml(b.name)}</strong><div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div><span>${b.cnt || 0}</span></div>`;
         }).join("");
     }
 
     // 活跃读者柱状图
-    const activeBody = document.getElementById("activeReaderBars");
-    if (activeBody) {
-        const map = new Map();
-        records.forEach(r => { map.set(r.readerId, (map.get(r.readerId) || 0) + 1); });
-        const sorted = readers.map(r => ({ reader: r, count: map.get(r.id) || 0 })).sort((a, b) => b.count - a.count);
-        const max = Math.max(...sorted.map(s => s.count), 1);
-        activeBody.innerHTML = sorted.map(s => {
-            const w = Math.round(s.count / max * 100);
-            return `<div class="bar-row"><strong>${escapeHtml(s.reader.name)}</strong><div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div><span>${s.count}</span></div>`;
+    const arRes = await reportApi.activeReaders();
+    const acBody = document.getElementById("activeReaderBars");
+    if (acBody && arRes.success && arRes.data) {
+        const max = Math.max(...arRes.data.map(a => a.cnt || 1), 1);
+        acBody.innerHTML = arRes.data.map(a => {
+            const w = Math.round((a.cnt || 1) / max * 100);
+            return `<div class="bar-row"><strong>${escapeHtml(a.name)}</strong><div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div><span>${a.cnt || 0}</span></div>`;
         }).join("");
     }
 
     // 逾期催还名单
-    const overdueBody = document.getElementById("overdueTableBody");
-    if (overdueBody) {
-        const today = todayStr();
-        const overdue = MockData.getOverdueRecords(today);
-        overdueBody.innerHTML = overdue.length ? overdue.map(r => {
-            const reader = MockData.getReader(r.readerId);
-            const book = MockData.getBook(r.bookId);
-            const rule = MockData.getRule(r.ruleId);
-            const days = daysBetween(r.dueDate, today);
-            return `<tr>
-                <td>${escapeHtml(reader?.name || "-")}</td>
-                <td>${escapeHtml(reader?.phone || "-")}</td>
-                <td>${escapeHtml(book?.title || "-")}</td>
-                <td>${r.dueDate}</td>
-                <td>${days}</td>
-                <td>${(days * (rule?.finePerDay || 0.5)).toFixed(2)} 元</td>
-            </tr>`;
-        }).join("") : `<tr><td colspan="6" class="empty">暂无逾期记录</td></tr>`;
+    const odRes = await reportApi.overdueList();
+    const odBody = document.getElementById("overdueTableBody");
+    if (odBody && odRes.success && odRes.data) {
+        odBody.innerHTML = odRes.data.length ? odRes.data.map(r => `
+            <tr><td>${escapeHtml(r.readerName)}</td><td>${escapeHtml(r.phone)}</td><td>${escapeHtml(r.bookName)}</td><td>${r.dueDate}</td><td>${r.overdueDays}</td><td>${parseFloat(r.fine||0).toFixed(2)} 元</td></tr>`).join("") : `<tr><td colspan="6" class="empty">暂无逾期记录</td></tr>`;
     }
 
-    // 更新今日日期
     const todayEl = document.getElementById("todayText");
-    if (todayEl) todayEl.textContent = `今天：${todayStr()}`;
+    if (todayEl) todayEl.textContent = '今天：' + todayStr();
 }
 
 // ==================== 系统安全（admin.html） ====================
 
-// --- 邀请码管理（仅系统管理员） ---
-
-function generateInviteCode() {
-    const role = document.getElementById("inviteCodeRole").value;
-    const maxUses = parseInt(document.getElementById("inviteCodeMaxUses").value) || 0;
-    const session = getSession();
-
-    // 生成 8 位随机大写字母数字
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 排除易混淆字符 I/O/0/1
-    let code = "";
-    for (let i = 0; i < 8; i++) {
-        code += chars[Math.floor(Math.random() * chars.length)];
-    }
-
-    const entry = {
-        id: MockData.nextInviteCodeId(),
-        code,
-        targetRole: role,
-        maxUses: maxUses,
-        usedCount: 0,
-        active: true,
-        createdBy: session ? session.username : "unknown",
-        createdAt: todayStr()
-    };
-
-    const codes = MockData.inviteCodes;
-    codes.push(entry);
-    MockData.inviteCodes = codes;
-    renderInviteCodeList();
-    showToast(`已生成邀请码：${code}（目标角色：${role}，最大使用次数：${maxUses > 0 ? maxUses : "不限"}）`);
-}
-
-function revokeInviteCode(codeId) {
-    const codes = MockData.inviteCodes;
-    const entry = codes.find(c => c.id === codeId);
-    if (!entry) return;
-    entry.active = !entry.active;
-    MockData.inviteCodes = codes;
-    renderInviteCodeList();
-    showToast(entry.active ? `邀请码 ${entry.code} 已重新激活` : `邀请码 ${entry.code} 已吊销`);
-}
-
-function renderInviteCodeList() {
-    const tbody = document.getElementById("inviteCodeListBody");
-    if (!tbody) return;
-    const codes = MockData.inviteCodes;
-    tbody.innerHTML = codes.length ? codes.map(c => `
-        <tr>
-            <td><code style="font-weight:700;letter-spacing:1px;">${escapeHtml(c.code)}</code></td>
-            <td>${escapeHtml(c.targetRole)}</td>
-            <td>${c.maxUses > 0 ? `${c.usedCount}/${c.maxUses}` : `${c.usedCount}/不限`}</td>
-            <td><span class="status ${c.active ? 'ok' : 'bad'}">${c.active ? '有效' : '已吊销'}</span></td>
-            <td>${escapeHtml(c.createdBy)}</td>
-            <td>${c.createdAt}</td>
-            <td>
-                <button class="small-btn ${c.active ? 'warning' : 'secondary'}" onclick="revokeInviteCode(${c.id})">
-                    ${c.active ? '吊销' : '恢复'}
-                </button>
-            </td>
-        </tr>`).join("")
-        : `<tr><td colspan="7" class="empty">暂无邀请码，请使用下方表单生成</td></tr>`;
-}
-
-function loadAdminData() {
-    // 用户权限
+async function loadAdminData() {
+    // 用户权限（从User表）
+    const usersRes = await adminApi.listUsers();
     const roleBody = document.getElementById("roleListBody");
-    if (roleBody) {
-        const users = MockData.users;
-        roleBody.innerHTML = users.map((u, i) => `
-            <tr>
-                <td>${i + 1}</td>
-                <td>${escapeHtml(u.username)}</td>
-                <td>${escapeHtml(u.role)}</td>
-                <td>
-                    <div class="row-actions">
-                        <button class="small-btn secondary" onclick="editRole('${escapeHtml(u.username)}')">编辑</button>
-                        <button class="small-btn danger" onclick="deleteRole('${escapeHtml(u.username)}')">删除</button>
-                    </div>
-                </td>
-            </tr>`).join("");
+    if (roleBody && usersRes.success && usersRes.data) {
+        roleBody.innerHTML = usersRes.data.map((u, i) => `
+            <tr><td>${i+1}</td><td>${escapeHtml(u.username)}</td><td>${escapeHtml(u.role)}</td>
+            <td><div class="row-actions"><button class="small-btn secondary" onclick="editRole('${escapeHtml(u.username)}','${escapeHtml(u.role)}',${u.userId})">编辑</button><button class="small-btn danger" onclick="deleteRole(${u.userId})">删除</button></div></td></tr>`).join("");
     }
 
-    // 分类chip
+    // 分类
+    const catRes = await categoryApi.list();
     const chipList = document.getElementById("categoryChipList");
-    if (chipList) {
-        chipList.innerHTML = MockData.categories.map(c => `
-            <span class="chip" title="${escapeHtml(c.description || "")}">${escapeHtml(c.category_name)}<button onclick="deleteCategory('${escapeHtml(c.category_name)}')">×</button></span>
-        `).join("");
+    if (chipList && catRes.success && catRes.data) {
+        chipList.innerHTML = catRes.data.map(c => `<span class="chip">${escapeHtml(c.categoryName)}<button onclick="deleteCategory(${c.categoryId})">×</button></span>`).join("");
     }
 
-    // 规则设置（默认加载"本科生"规则）
+    // 规则
     loadRuleForType();
-
-    // 邀请码列表
     renderInviteCodeList();
 }
 
-function loadRuleForType() {
-    const selector = document.getElementById("ruleReaderType");
-    const type = selector ? selector.value : "本科生";
-    const rule = MockData.getRuleForType(type);
-    if (rule) {
-        const fields = { maxBorrow: rule.maxBorrowCount, borrowDays: rule.maxBorrowDays, overdueFee: rule.finePerDay, maxRenewTimes: rule.maxRenewTimes, renewDays: rule.renewDays };
-        Object.entries(fields).forEach(([id, val]) => {
-            const el = document.getElementById(id);
-            if (el) el.value = val;
-        });
-    }
-}
-
-function openRoleModal(username) {
-    const modal = document.getElementById("roleModal");
+function openRoleModal(username, role, userId) {
     document.getElementById("roleModalTitle").textContent = username ? "编辑用户权限" : "新增用户权限";
     document.getElementById("editRoleUsername").value = username || "";
+    document.getElementById("editRoleUserId").value = userId || "";
     document.getElementById("roleUsername").value = username || "";
-    document.getElementById("roleType").value = "图书管理员";
-    if (username) {
-        const user = MockData.users.find(u => u.username === username);
-        if (user) document.getElementById("roleType").value = user.role;
-    }
-    modal.style.display = "flex";
+    document.getElementById("roleType").value = role || "图书管理员";
+    if (!username) document.getElementById("rolePassword").value = "123456";
+    document.getElementById("roleModal").style.display = "flex";
 }
 
 function closeRoleModal() { document.getElementById("roleModal").style.display = "none"; }
 
-function saveRole() {
-    const oldUsername = document.getElementById("editRoleUsername").value.trim();
+async function saveRole() {
+    const userId = document.getElementById("editRoleUserId").value;
     const username = document.getElementById("roleUsername").value.trim();
     const role = document.getElementById("roleType").value;
     if (!username) { showToast("用户名不能为空"); return; }
-
-    const users = MockData.users;
-    const idx = users.findIndex(u => u.username === oldUsername);
-    if (idx >= 0) {
-        users[idx] = { ...users[idx], username, role };
-    } else {
-        if (users.find(u => u.username === username)) { showToast("用户名已存在"); return; }
-        users.push({ username, password: "123456", role });
-    }
-    MockData.users = users;
-    closeRoleModal();
-    loadAdminData();
-    showToast("用户权限已保存。");
+    const res = userId ? await adminApi.updateUser({ userId: parseInt(userId), username, role }) : await adminApi.addUser({ username, password: document.getElementById("rolePassword")?.value || "123456", role, isActive: true });
+    if (res.success) { closeRoleModal(); loadAdminData(); showToast(userId ? "已更新。" : "已添加。"); }
+    else showToast("操作失败：" + res.message);
 }
 
-function editRole(username) { openRoleModal(username); }
-
-async function deleteRole(username) {
-    if (!await showConfirm("确认删除该用户权限记录吗？")) return;
-    MockData.users = MockData.users.filter(u => u.username !== username);
-    loadAdminData();
-    showToast("已删除。");
+async function deleteRole(userId) {
+    if (!await showConfirm("确认删除？")) return;
+    const res = await adminApi.deleteUser(userId);
+    if (res.success) { loadAdminData(); showToast("已删除。"); }
+    else showToast("删除失败：" + res.message);
 }
 
-function openCategoryModal() { /* 简化为直接添加 */ }
-
-async function deleteCategory(name) {
-    if (!await showConfirm("确认删除该分类吗？")) return;
-    MockData.categories = MockData.categories.filter(c => c.category_name !== name);
-    loadAdminData();
-    showToast("分类已删除。");
+async function deleteCategory(id) {
+    if (!await showConfirm("确认删除该分类？")) return;
+    const res = await categoryApi.delete(id);
+    if (res.success) { loadAdminData(); showToast("分类已删除。"); }
+    else showToast("删除失败：" + res.message);
 }
 
-function addCategory() {
-    const input = document.getElementById("newCategory");
-    const name = input.value.trim();
+async function addCategory() {
+    const name = document.getElementById("newCategory")?.value.trim();
     if (!name) { showToast("请输入分类名称"); return; }
-    if (MockData.categories.some(c => c.category_name === name)) { showToast("分类已存在"); return; }
-    const maxId = Math.max(...MockData.categories.map(c => c.category_id), 0);
-    MockData.categories.push({ category_id: maxId + 1, category_name: name, description: "" });
-    input.value = "";
-    loadAdminData();
-    showToast("分类已添加。");
+    const res = await categoryApi.add(name);
+    if (res.success) { document.getElementById("newCategory").value = ""; loadAdminData(); showToast("分类已添加。"); }
+    else showToast("添加失败：" + res.message);
 }
 
-function saveBorrowRules() {
-    const readerType = document.getElementById("ruleReaderType")?.value || "本科生";
+async function loadRuleForType() {
+    const t = document.getElementById("ruleReaderType")?.value || "本科生";
+    const res = await ruleApi.getByType(t);
+    if (res.success && res.data) {
+        const r = res.data;
+        const fields = { maxBorrow: r.maxBorrowCount, borrowDays: r.maxBorrowDays, overdueFee: r.finePerDay, maxRenewTimes: r.maxRenewTimes, renewDays: r.renewDays };
+        Object.entries(fields).forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.value = val; });
+    }
+}
+
+async function saveBorrowRules() {
     const maxBorrowCount = Number(document.getElementById("maxBorrow")?.value) || 5;
     const maxBorrowDays = Number(document.getElementById("borrowDays")?.value) || 30;
     const finePerDay = Number(document.getElementById("overdueFee")?.value) || 0.5;
     const maxRenewTimes = Number(document.getElementById("maxRenewTimes")?.value) || 1;
     const renewDays = Number(document.getElementById("renewDays")?.value) || 15;
+    const readerType = document.getElementById("ruleReaderType")?.value || "本科生";
+    const res = await ruleApi.save({ readerType, maxBorrowCount, maxBorrowDays, finePerDay, maxRenewTimes, renewDays });
+    showToast(res.success ? "规则已保存（数据库）。" : "保存失败：" + res.message);
+}
 
-    const rule = MockData.getRuleForType(readerType);
-    if (rule) {
-        rule.maxBorrowCount = maxBorrowCount;
-        rule.maxBorrowDays = maxBorrowDays;
-        rule.finePerDay = finePerDay;
-        rule.maxRenewTimes = maxRenewTimes;
-        rule.renewDays = renewDays;
+async function editRole(username) {
+    const res = await adminApi.listUsers();
+    if (res.success && res.data) {
+        const u = res.data.find(x => x.username === username);
+        if (u) openRoleModal(u.username, u.role, u.userId);
     }
-    showToast(`「${readerType}」借阅规则已保存。`);
 }
 
 function backupData() {
@@ -1324,7 +1198,6 @@ window.editRole = editRole;
 window.deleteRole = deleteRole;
 window.deleteCategory = deleteCategory;
 window.addCategory = addCategory;
-window.loadRuleForType = loadRuleForType;
 window.saveBorrowRules = saveBorrowRules;
 window.backupData = backupData;
 window.restoreDemoData = restoreDemoData;

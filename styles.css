@@ -275,7 +275,9 @@ tr:last-child td { border-bottom: 0; }
 .rule-row label { font-weight: 600; color: var(--muted); }
 
 /* ==================== 待办列表 ==================== */
-.todo-list { display: grid; gap: 10px; }
+.todo-list { display: grid; gap: 10px; max-height: 400px; overflow-y: auto; padding-right: 4px; }
+.todo-list::-webkit-scrollbar { width: 6px; }
+.todo-list::-webkit-scrollbar-thumb { background: #c4d4cc; border-radius: 3px; }
 .todo-item {
     display: flex; justify-content: space-between; gap: 12px; padding: 12px;
     cursor: pointer; transition: background 0.2s ease, transform 0.1s ease;

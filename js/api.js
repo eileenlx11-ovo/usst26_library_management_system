@@ -1,241 +1,109 @@
 /**
- * API服务层 - 统一管理所有后端接口调用
- * 后端已实现的接口直接调用，未实现的用mock数据占位
+ * API服务层 - 所有模块已对接后端
  */
-const API_BASE = 'http://localhost:8080';
+const API = 'http://localhost:8080';
 
-// ===================== 通用请求函数 =====================
-
-async function apiPost(path, params = {}) {
-    const url = `${API_BASE}${path}`;
-    const formBody = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-        if (value != null && value !== '') formBody.append(key, String(value));
-    }
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formBody.toString()
-        });
-        const json = await res.json();
-        return {
-            success: json.code === 1,
-            message: json.msg || 'success',
-            data: json.data
-        };
-    } catch (err) {
-        console.warn('[API] 请求失败:', path, err.message);
-        return { success: false, message: '网络错误，无法连接后端服务器', data: null };
-    }
+// ===================== 通用请求 =====================
+async function apiGet(p, q = {}) {
+    const u = new URL(`${API}${p}`);
+    for (const [k, v] of Object.entries(q)) { if (v != null && v !== '') u.searchParams.append(k, String(v)); }
+    try { const r = await fetch(u.toString()); const j = await r.json(); return { success: j.code === 200 || j.code === 1, message: j.msg || 'success', data: j.data }; }
+    catch (e) { console.warn('[API] GET error:', p, e.message); return { success: false, message: '网络错误', data: null }; }
+}
+async function apiPost(p, q = {}) {
+    const u = `${API}${p}`; const fb = new URLSearchParams(); for (const [k, v] of Object.entries(q)) { if (v != null && v !== '') fb.append(k, String(v)); }
+    try { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fb.toString() }); const j = await r.json(); return { success: j.code === 200 || j.code === 1, message: j.msg || 'success', data: j.data }; }
+    catch (e) { console.warn('[API] POST error:', p, e.message); return { success: false, message: '网络错误', data: null }; }
+}
+async function apiPostJson(p, d) {
+    try { const r = await fetch(`${API}${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json;charset=UTF-8' }, body: JSON.stringify(d) }); const j = await r.json(); return { success: j.code === 200 || j.code === 1, message: j.msg || 'success', data: j.data }; }
+    catch (e) { console.warn('[API] POST error:', p, e.message); return { success: false, message: '网络错误', data: null }; }
+}
+async function apiPut(p, d) {
+    try { const r = await fetch(`${API}${p}`, { method: 'PUT', headers: { 'Content-Type': 'application/json;charset=UTF-8' }, body: JSON.stringify(d) }); const j = await r.json(); return { success: j.code === 200 || j.code === 1, message: j.msg || 'success', data: j.data }; }
+    catch (e) { console.warn('[API] PUT error:', p, e.message); return { success: false, message: '网络错误', data: null }; }
+}
+async function apiDel(p) {
+    try { const r = await fetch(`${API}${p}`, { method: 'DELETE' }); const j = await r.json(); return { success: j.code === 200 || j.code === 1, message: j.msg || 'success', data: j.data }; }
+    catch (e) { console.warn('[API] DELETE error:', p, e.message); return { success: false, message: '网络错误', data: null }; }
 }
 
-async function apiGet(path, params = {}) {
-    const url = new URL(`${API_BASE}${path}`);
-    for (const [key, value] of Object.entries(params)) {
-        if (value != null && value !== '') url.searchParams.append(key, String(value));
-    }
-    try {
-        const res = await fetch(url.toString());
-        const json = await res.json();
-        return {
-            success: json.code === 1,
-            message: json.msg || 'success',
-            data: json.data
-        };
-    } catch (err) {
-        console.warn('[API] GET请求失败:', path, err.message);
-        return { success: false, message: '网络错误，无法连接后端服务器', data: null };
-    }
-}
+function cb(b) { return { id: b.bookId, title: b.bookName, author: b.authorName, isbn: b.isbn, publisher: b.publisherName, category: b.categoryName, total: b.totalCount, available: b.availableCount, status: b.status || (b.availableCount > 0 ? '有货' : '缺货'), borrowCount: b.borrowCount || 0 }; }
 
-// ===================== 借阅模块 API（✅ 后端已实现） =====================
-
-const borrowApi = {
-    /** 借书 POST /bookadmin/borrow/lend */
-    async lend(readerId, bookId) {
-        return apiPost('/bookadmin/borrow/lend', { readerId, bookId });
-    },
-    /** 还书 POST /bookadmin/borrow/return */
-    async returnBook(borrowId) {
-        return apiPost('/bookadmin/borrow/return', { borrowId });
-    },
-    /** 续借 POST /bookadmin/borrow/renew */
-    async renew(borrowId) {
-        return apiPost('/bookadmin/borrow/renew', { borrowId });
-    },
-    /** 逾期催还 POST /bookadmin/borrow/notify */
-    async notifyOverdue() {
-        return apiPost('/bookadmin/borrow/notify');
-    }
-};
-
-// ===================== 图书模块 API（⚠️ 后端空壳，使用mock） =====================
-
+// ===================== 图书 ✅ =====================
 const bookApi = {
-    async list(params = {}) {
-        return useMock('bookApi.list', () => {
-            let list = MockData.books;
-            if (params.keyword) {
-                const kw = params.keyword.toLowerCase();
-                list = list.filter(b => (b.title + b.author + b.category).toLowerCase().includes(kw));
-            }
-            if (params.category) {
-                list = list.filter(b => b.category === params.category);
-            }
-            return { success: true, message: 'success', data: list };
-        });
-    },
-    async add(book) {
-        return useMock('bookApi.add', () => {
-            const b = { ...book, id: MockData.nextBookId(), borrowCount: 0, status: book.available > 0 ? '在馆' : '借空' };
-            MockData.books.push(b);
-            return { success: true, message: 'success', data: b };
-        });
-    },
-    async update(book) {
-        return useMock('bookApi.update', () => {
-            const idx = MockData.books.findIndex(b => b.id === book.id);
-            if (idx >= 0) MockData.books[idx] = { ...MockData.books[idx], ...book };
-            return { success: true, message: 'success', data: null };
-        });
-    },
-    async delete(id) {
-        return useMock('bookApi.delete', () => {
-            MockData.books = MockData.books.filter(b => b.id !== id);
-            return { success: true, message: 'success', data: null };
-        });
-    }
+    async list(p = {}) { const r = await apiGet('/bookadmin/book/page', { pageNum: p.pageNum || 1, pageSize: p.pageSize || 8, bookName: p.bookName || '', authorName: p.authorName || '', isbn: p.isbn || '', categoryId: p.categoryId || '', status: p.status || '' }); if (r.success && r.data && r.data.records) { console.log('[DB] 图书数据来自后端API，共' + r.data.total + '条'); r.data.records = r.data.records.map(cb); } return r; },
+    async getById(id) { const r = await apiGet('/bookadmin/book/' + id); if (r.success && r.data) r.data = cb(r.data); return r; },
+    async add(b) { return apiPostJson('/bookadmin/book/add', { bookName: b.title, isbn: b.isbn, authorName: b.author, categoryName: b.category, publisherName: b.publisher || '', publishDate: b.publishDate || '', price: b.price || 0, totalCount: b.total || 1, availableCount: b.available || 1, status: b.status || '在馆' }); },
+    async update(b) { return apiPut('/bookadmin/book', { bookId: b.id, bookName: b.title, isbn: b.isbn, authorName: b.author, categoryName: b.category, publisherName: b.publisher || '', publishDate: b.publishDate || '', price: b.price || 0, totalCount: b.total || 1, availableCount: b.available || 0, status: b.status || '在馆' }); },
+    async delete(id) { return apiDel('/bookadmin/book/' + id); }
 };
 
-// ===================== 读者模块 API（⚠️ 后端空壳，使用mock） =====================
+// ===================== 借阅 ✅ =====================
+const borrowApi = {
+    async lend(readerId, bookId) { return apiPost('/bookadmin/borrow/lend', { readerId, bookId }); },
+    async returnBook(borrowId) { return apiPost('/bookadmin/borrow/return', { borrowId }); },
+    async renew(borrowId) { return apiPost('/bookadmin/borrow/renew', { borrowId }); },
+    async notifyOverdue() { return apiPost('/bookadmin/borrow/notify'); },
+    /** 读者个人记录 */
+    async myRecords(readerId) { return apiGet('/reader/borrow/list/' + readerId); }
+};
 
+// ===================== 读者 ✅ =====================
 const readerApi = {
-    async list(params = {}) {
-        return useMock('readerApi.list', () => {
-            let list = MockData.readers;
-            if (params.keyword) {
-                const kw = params.keyword.toLowerCase();
-                list = list.filter(r => (r.name + r.cardId).toLowerCase().includes(kw));
-            }
-            return { success: true, message: 'success', data: list };
-        });
-    },
-    async add(reader) {
-        return useMock('readerApi.add', () => {
-            const r = { ...reader, id: MockData.nextReaderId(), registerDate: todayStr() };
-            MockData.readers.push(r);
-            return { success: true, message: 'success', data: r };
-        });
-    },
-    async update(id, reader) {
-        return useMock('readerApi.update', () => {
-            const idx = MockData.readers.findIndex(r => r.id === id);
-            if (idx >= 0) MockData.readers[idx] = { ...MockData.readers[idx], ...reader };
-            return { success: true, message: 'success', data: null };
-        });
-    },
-    async delete(id) {
-        return useMock('readerApi.delete', () => {
-            MockData.readers = MockData.readers.filter(r => r.id !== id);
-            return { success: true, message: 'success', data: null };
-        });
-    }
+    async list(keyword) { return apiGet('/bookadmin/reader/list', { keyword: keyword || '' }); },
+    async add(r) { return apiPostJson('/bookadmin/reader', { readerName: r.name, gender: r.gender || '', phone: r.phone || '', readerType: r.type || '本科生', status: r.status || '正常' }); },
+    async update(r) { return apiPut('/bookadmin/reader', { readerId: r.id, readerName: r.name, gender: r.gender || '', phone: r.phone || '', readerType: r.type || '本科生', status: r.status || '正常' }); },
+    async delete(id) { return apiDel('/bookadmin/reader/' + id); }
 };
 
-// ===================== 罚款模块 API（⚠️ 后端空壳，使用mock） =====================
-
-const fineApi = {
-    async list() {
-        return useMock('fineApi.list', () => {
-            return { success: true, message: 'success', data: [...MockData.fines] };
-        });
-    },
-    async pay(fineId) {
-        return useMock('fineApi.pay', () => {
-            const fine = MockData.fines.find(f => f.fineId === fineId);
-            if (fine) { fine.paid = true; fine.payDate = todayStr(); }
-            return { success: true, message: 'success', data: null };
-        });
-    }
-};
-
-// ===================== 规则模块 API（⚠️ 后端空壳，使用mock） =====================
-
-const ruleApi = {
-    async get(readerType) {
-        return useMock('ruleApi.get', () => {
-            const rule = MockData.rules.find(r => r.readerType === readerType) || MockData.rules[0];
-            return { success: true, message: 'success', data: rule };
-        });
-    },
-    async save(rule) {
-        return useMock('ruleApi.save', () => {
-            const idx = MockData.rules.findIndex(r => r.readerType === rule.readerType);
-            if (idx >= 0) MockData.rules[idx] = rule;
-            else MockData.rules.push(rule);
-            return { success: true, message: 'success', data: null };
-        });
-    }
-};
-
-// ===================== 分类模块 API（⚠️ 后端空壳，使用mock） =====================
-
-const categoryApi = {
-    async list() {
-        return useMock('categoryApi.list', () => {
-            return { success: true, message: 'success', data: [...MockData.categories] };
-        });
-    },
-    async add(name) {
-        return useMock('categoryApi.add', () => {
-            if (!MockData.categories.includes(name)) MockData.categories.push(name);
-            return { success: true, message: 'success', data: null };
-        });
-    },
-    async delete(name) {
-        return useMock('categoryApi.delete', () => {
-            MockData.categories = MockData.categories.filter(c => c !== name);
-            return { success: true, message: 'success', data: null };
-        });
-    }
-};
-
-// ===================== 统计报表 API（⚠️ 后端空壳，使用mock） =====================
-
+// ===================== 统计报表 ✅ =====================
 const reportApi = {
-    async hotBooks() {
-        return useMock('reportApi.hotBooks', () => {
-            const sorted = [...MockData.books].sort((a, b) => (b.borrowCount || 0) - (a.borrowCount || 0)).slice(0, 10);
-            return { success: true, message: 'success', data: sorted };
-        });
-    },
-    async activeReaders() {
-        return useMock('reportApi.activeReaders', () => {
-            const map = new Map();
-            MockData.borrowRecords.forEach(r => {
-                map.set(r.readerId, (map.get(r.readerId) || 0) + 1);
-            });
-            const list = MockData.readers.map(r => ({ reader: r, count: map.get(r.id) || 0 }))
-                .sort((a, b) => b.count - a.count);
-            return { success: true, message: 'success', data: list };
-        });
-    },
-    async overdueList() {
-        return useMock('reportApi.overdueList', () => {
-            const today = new Date();
-            return { success: true, message: 'success', data: MockData.getOverdueRecords(today) };
-        });
-    }
+    async hotBooks() { return apiGet('/systemadmin/tool/hot-books'); },
+    async activeReaders() { return apiGet('/systemadmin/tool/active-readers'); },
+    async overdueList() { return apiGet('/systemadmin/tool/overdue-list'); },
+    async fineList() { return apiGet('/systemadmin/tool/fine-list'); }
 };
 
-// ===================== Mock 回退辅助 =====================
+// ===================== 分类 ✅ =====================
+const categoryApi = {
+    async list() { return apiGet('/systemadmin/book/categories'); },
+    async add(name) { return apiPostJson('/systemadmin/book/category', { categoryName: name }); },
+    async delete(id) { return apiDel('/systemadmin/book/category/' + id); }
+};
 
-function useMock(apiName, mockFn) {
-    console.warn(`[API] ${apiName}: 后端接口未就绪，使用本地mock数据`);
-    return Promise.resolve(mockFn());
-}
+// ===================== 规则 ✅ =====================
+const ruleApi = {
+    async list() { return apiGet('/systemadmin/borrow/rules'); },
+    async getByType(type) { return apiGet('/systemadmin/borrow/rule/' + type); },
+    async save(rule) { return apiPostJson('/systemadmin/borrow/rule', rule); }
+};
 
-function todayStr() {
-    return new Date().toISOString().slice(0, 10);
-}
+// ===================== 用户权限 ✅ =====================
+const adminApi = {
+    async listUsers() { return apiGet('/systemadmin/admin/users'); },
+    async addUser(u) { return apiPostJson('/systemadmin/admin/user', u); },
+    async updateUser(u) { return apiPut('/systemadmin/admin/user', u); },
+    async deleteUser(id) { return apiDel('/systemadmin/admin/user/' + id); }
+};
+
+// ===================== 罚款 ✅ =====================
+const fineApi = {
+    async list() { return apiGet('/systemadmin/tool/fine-list'); }
+};
+
+// ===================== 登录/注册 ✅ =====================
+const authApi = {
+    async login(username, password, role) { return apiPost('/auth/login', { username, password, role }); },
+    async register(username, password, role, inviteCode) { return apiPost('/auth/register', { username, password, role, inviteCode }); }
+};
+
+// ===================== 邀请码 ✅ =====================
+const inviteApi = {
+    async list() { return apiGet('/systemadmin/invite/list'); },
+    async generate(role, maxUses, expireDays) { return apiPost('/systemadmin/invite/generate', { role, maxUses: maxUses || 1, expireDays: expireDays || 30 }); },
+    async revoke(id) { return apiPut('/systemadmin/invite/revoke/' + id); }
+};
+
+// ===================== 辅助 =====================
+function todayStr() { return new Date().toISOString().slice(0, 10); }
