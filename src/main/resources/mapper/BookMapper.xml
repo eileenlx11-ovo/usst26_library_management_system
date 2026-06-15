@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lib.mapper.BookMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BookVOMap" type="com.lib.vo.BookVO">
+        <id column="book_id" property="bookId"/>
+        <result column="book_name" property="bookName"/>
+        <result column="author_name" property="authorName"/>
+        <result column="isbn" property="isbn"/>
+        <result column="publisher_name" property="publisherName"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="available_count" property="availableCount"/>
+        <result column="status" property="status"/>
+    </resultMap>
+
+    <!-- 动态条件查询（指定 parameterType） -->
+    <select id="selectByCondition" parameterType="com.lib.dto.BookPageQueryDTO" resultMap="BookVOMap">
+        SELECT
+        b.book_id,
+        b.book_name,
+        a.author_name,
+        b.isbn,
+        p.publisher_name,
+        c.category_name,
+        b.total_count,
+        b.available_count,
+        b.status
+        FROM book b
+        LEFT JOIN author a ON b.author_id = a.author_id
+        LEFT JOIN category c ON b.category_id = c.category_id
+        LEFT JOIN publisher p ON b.publisher_id = p.publisher_id
+        <where>
+            <if test="bookName != null and bookName != ''">
+                AND b.book_name LIKE CONCAT('%', #{bookName}, '%')
+            </if>
+            <if test="authorName != null and authorName != ''">
+                AND a.author_name LIKE CONCAT('%', #{authorName}, '%')
+            </if>
+            <if test="isbn != null and isbn != ''">
+                AND b.isbn LIKE CONCAT('%', #{isbn}, '%')
+            </if>
+            <if test="categoryId != null">
+                AND b.category_id = #{categoryId}
+            </if>
+            <if test="status != null and status != ''">
+                AND b.status = #{status}
+            </if>
+        </where>
+        ORDER BY b.book_id DESC
+    </select>
+    <resultMap id="BookDetailVOMap" type="com.lib.vo.BookDetailVO">
+        <id column="book_id" property="bookId"/>
+        <result column="book_name" property="bookName"/>
+        <result column="isbn" property="isbn"/>
+        <result column="author_name" property="authorName"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="publisher_name" property="publisherName"/>
+        <result column="publish_date" property="publishDate"/>
+        <result column="price" property="price"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="available_count" property="availableCount"/>
+        <result column="status" property="status"/>
+    </resultMap>
+
+    <!-- 根据ID查询图书详情 -->
+    <select id="selectBookDetailById" resultMap="BookDetailVOMap">
+        SELECT
+            b.book_id,
+            b.book_name,
+            b.isbn,
+            a.author_name,
+            c.category_name,
+            p.publisher_name,
+            b.publish_date,
+            b.price,
+            b.total_count,
+            b.available_count,
+            b.status
+        FROM book b
+                 LEFT JOIN author a ON b.author_id = a.author_id
+                 LEFT JOIN category c ON b.category_id = c.category_id
+                 LEFT JOIN publisher p ON b.publisher_id = p.publisher_id
+        WHERE b.book_id = #{bookId}
+    </select>
+
+</mapper>

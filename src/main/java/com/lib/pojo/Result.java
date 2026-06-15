@@ -4,24 +4,38 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class Result {
-    private Integer code;//响应码，1 代表成功; 0 代表失败
-    private String msg;  //响应信息 描述字符串
-    private Object data; //返回的数据
 
-    //增删改 成功响应
-    public static Result success(){
-        return new Result(1,"success",null);
+
+import lombok.Data;
+
+@Data
+public class Result<T> {
+    private Integer code;
+    private String msg;
+    private T data;
+
+    // 成功（有数据）
+    public static <T> Result<T> success(T data) {
+        Result<T> result = new Result<>();
+        result.setCode(200);
+        result.setMsg("success");
+        result.setData(data);
+        return result;
     }
-    //查询 成功响应
-    public static Result success(Object data){
-        return new Result(1,"success",data);
+
+    // 成功（无数据，如添加、修改、删除）
+    public static <T> Result<T> success() {
+        Result<T> result = new Result<>();
+        result.setCode(200);
+        result.setMsg("success");
+        return result;
     }
-    //失败响应
-    public static Result error(String msg){
-        return new Result(0,msg,null);
+
+    // 失败
+    public static <T> Result<T> error(String msg) {
+        Result<T> result = new Result<>();
+        result.setCode(500);
+        result.setMsg(msg);
+        return result;
     }
 }
