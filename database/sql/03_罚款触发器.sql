@@ -50,7 +50,7 @@ FOR EACH ROW
 BEGIN
     UPDATE Book
     SET available_count = available_count - 1
-    WHERE book_id = NEW.book_id;
+    WHERE book_id = NEW.book_id AND available_count > 0;
 END$$
 
 DELIMITER ;
