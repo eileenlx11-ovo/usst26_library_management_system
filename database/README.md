@@ -66,16 +66,16 @@ source query/05_展示查询.sql
 
 | 表名 | 说明 | 记录数 |
 |------|------|--------|
-| Author | 作者信息 | 15 |
-| Publisher | 出版社信息 | 8 |
-| Category | 图书分类 | 8 |
-| Book | 图书信息 | 10 |
-| Reader | 读者信息 | 20 |
-| User | 系统用户（登录认证） | 20 |
-| InviteCode | 邀请码（注册权限控制） | — |
-| Rule | 借阅规则 | 4 |
-| BorrowRecord | 借阅记录 | 30 |
-| Fine | 罚款记录 | 6 |
+| Author | 作者信息 | 113 |
+| Publisher | 出版社信息 | 106 |
+| Category | 图书分类 | 105 |
+| Book | 图书信息 | 118 |
+| Reader | 读者信息 | 120 |
+| User | 系统用户（登录认证） | 105 |
+| InviteCode | 邀请码（注册权限控制） | 108 |
+| Rule | 借阅规则 | 100 |
+| BorrowRecord | 借阅记录（大关系） | 150 |
+| Fine | 罚款记录 | 110 |
 
 ---
 
