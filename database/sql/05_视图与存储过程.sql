@@ -32,9 +32,9 @@ SELECT r.reader_id,
        b.book_name,
        br.borrow_date,
        br.due_date,
-       DATEDIFF(CURDATE(), br.due_date) AS overdue_days,
+       GREATEST(0, DATEDIFF(CURDATE(), br.due_date)) AS overdue_days,
        ru.fine_per_day,
-       DATEDIFF(CURDATE(), br.due_date) * ru.fine_per_day AS estimated_fine
+       GREATEST(0, DATEDIFF(CURDATE(), br.due_date)) * ru.fine_per_day AS estimated_fine
 FROM BorrowRecord br
 JOIN Reader r ON br.reader_id = r.reader_id
 JOIN Book b ON br.book_id = b.book_id
