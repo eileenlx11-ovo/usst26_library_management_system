@@ -8,7 +8,7 @@
 
 ```
 database/
-├── README.md                          ← 本文件
+├── README.md                          ← 本文件（项目说明文档）
 ├── sql/                               ← 建表与逻辑对象（按序号执行）
 │   ├── 01_图书模块_建表.sql             ← Author, Publisher, Category, Book
 │   ├── 02_借阅模块_建表.sql             ← Reader, Rule, BorrowRecord, Fine, User, InviteCode + 索引
@@ -19,7 +19,7 @@ database/
 │   ├── 07_并发控制.sql                  ← 悲观锁 + 事务隔离 + 死锁重试
 │   └── 08_同步更新backup触发器.sql       ← 备份库实时同步（10张表×3操作=30个触发器）
 ├── data/                              ← 测试数据
-│   ├── 04_全部插入数据.sql              ← 10张表完整测试数据（共1135条）
+│   ├── 04_全部插入数据.sql              ← 10张表完整测试数据（共1160条）
 │   ├── user表字段查询.xls               ← User 表字段导出
 │   └── 字段查询结果.xls                 ← 各表字段结构导出
 ├── query/                             ← 查询脚本
@@ -87,96 +87,326 @@ source query/05_展示查询.sql;
 | User | 系统用户（登录认证） | 130 | B |
 | InviteCode | 邀请码（注册权限控制） | 108 | B |
 
+> 合计 **1160 条**测试数据，覆盖正常、边界、异常等多种场景。
+
 ---
 
-## ⚡ 触发器
+## ⚡ 触发器（共 37 个）
 
-### 业务触发器（03_罚款触发器.sql）
+### 业务触发器（03_罚款触发器.sql）— 3 个
 
-| 触发器 | 触发时机 | 功能 |
-|--------|----------|------|
-| `trg_auto_create_fine` | AFTER UPDATE on BorrowRecord | 归还逾期图书时自动生成罚款记录 |
-| `trg_borrow_decrease_stock` | AFTER INSERT on BorrowRecord | 借出时 available_count - 1（含 >0 防负数保护） |
-| `trg_return_increase_stock` | AFTER UPDATE on BorrowRecord | 归还时 available_count + 1 |
+| 触发器 | 触发时机 | 功能 | 设计说明 |
+|--------|----------|------|----------|
+| `trg_auto_create_fine` | AFTER UPDATE on BorrowRecord | 归还逾期图书时自动计算并插入罚款记录 | 条件：return_date 从NULL变为非NULL 且 overdue_days > 0；金额 = 逾期天数 × Rule.fine_per_day |
+| `trg_borrow_decrease_stock` | BEFORE INSERT on BorrowRecord | 借出时自动扣减 Book.available_count | 使用 BEFORE 而非 AFTER：可在写入前校验库存，不足时 SIGNAL 拒绝 INSERT，避免数据不一致 |
+| `trg_return_increase_stock` | BEFORE UPDATE on BorrowRecord | 归还时自动恢复 Book.available_count | 条件：return_date 从NULL变为非NULL；与扣减触发器对称的 BEFORE 设计 |
 
-### 审计触发器（06_系统安全.sql）
+**执行顺序说明**：还书时 → BEFORE触发器恢复库存 → 执行UPDATE本身 → AFTER触发器计算罚款，三者互不干扰。
 
-| 触发器 | 记录内容 |
-|--------|----------|
-| `trg_audit_borrow` | 借书操作（reader_id, book_id, 日期） |
-| `trg_audit_return` | 还书 + 续借操作 |
-| `trg_audit_pay_fine` | 缴费操作 |
-| `trg_audit_user_create` | 用户创建 |
+### 审计触发器（06_系统安全.sql）— 4 个
 
-### 备份同步触发器（08_同步更新backup触发器.sql）
+| 触发器 | 触发时机 | 记录内容 | 存储格式 |
+|--------|----------|----------|----------|
+| `trg_audit_borrow` | AFTER INSERT on BorrowRecord | 借书操作：reader_id, book_id, 借阅日期, 到期日期 | JSON |
+| `trg_audit_return` | AFTER UPDATE on BorrowRecord | 还书：归还日期+逾期天数；续借：新到期日 | JSON |
+| `trg_audit_pay_fine` | AFTER UPDATE on Fine | 缴费：borrow_id, 金额, 缴费日期 | JSON |
+| `trg_audit_user_create` | AFTER INSERT on User | 用户创建：用户名, 角色 | JSON |
+
+### 备份同步触发器（08_同步更新backup触发器.sql）— 30 个
 
 - 10张表 × 3操作（INSERT/UPDATE/DELETE）= **30个触发器**
-- 命名：`trg_backup_<表名>_<insert|update|delete>`
-- 实时同步主库变更到 `library_db_backup`
+- 命名规范：`trg_backup_<表名>_<insert|update|delete>`
+- 功能：任何对主库的数据变更实时同步到 `library_db_backup` 备份库
+- 实现方式：在每个触发器中直接操作备份库的对应表，INSERT/UPDATE/DELETE 逐字段同步
 
 ---
 
-## 📈 存储过程
+## 📈 存储过程（共 6 个）
 
-| 存储过程 | 功能 | 关键特性 | 定义位置 |
-|----------|------|----------|----------|
-| `sp_borrow_book` | 借书 | FOR UPDATE 悲观锁 + 事务 + 根据reader_type自动匹配规则 | 07 |
-| `sp_return_book` | 还书 | 事务 + 触发器联动（罚款+库存） | 07 |
-| `sp_renew_book` | 续借 | FOR UPDATE 防重复续借 | 07 |
-| `sp_pay_fine` | 缴罚款 | FOR UPDATE 防重复缴费 | 07 |
-| `sp_register_user` | 用户注册 | 事务 + 邀请码验证 | 04 |
-| `sp_borrow_book_safe` | 借书（安全版） | 捕获死锁错误码1213，自动重试3次 | 07 |
+| 存储过程 | 功能 | 入参 | 出参 | 关键特性 | 定义位置 |
+|----------|------|------|------|----------|----------|
+| `sp_borrow_book` | 借书 | reader_id, book_id, rule_id | p_result | FOR UPDATE 悲观锁 + 事务 + 校验状态/库存/上限 | 07 |
+| `sp_return_book` | 还书 | borrow_id | p_result | FOR UPDATE 防重复还书 + 触发器联动（罚款+库存） | 07 |
+| `sp_renew_book` | 续借 | borrow_id | p_result | FOR UPDATE 防重复续借 + 单次续借限制 | 07 |
+| `sp_pay_fine` | 缴罚款 | fine_id | p_result | FOR UPDATE 防重复缴费 | 07 |
+| `sp_register_user` | 用户注册 | username, password, invite_code, reader_name, gender, phone, reader_type | SELECT结果集 | 事务 + 邀请码验证 + 自动创建Reader记录 | 04 |
+| `sp_borrow_book_safe` | 借书（死锁安全版） | reader_id, book_id, rule_id | p_result | 封装sp_borrow_book，捕获错误码1213自动重试最多3次 | 07 |
+
+### 存储过程调用示例
+
+```sql
+-- 借书
+CALL sp_borrow_book(1, 5, 1, @result);
+SELECT @result;  -- '成功：借阅完成' 或 '失败：图书无可借库存'
+
+-- 还书
+CALL sp_return_book(10, @result);
+SELECT @result;  -- '成功：已归还，逾期3天，罚款已自动生成'
+
+-- 续借
+CALL sp_renew_book(10, @result);
+SELECT @result;  -- '成功：续借15天' 或 '失败：已续借过，不可重复续借'
+
+-- 缴费
+CALL sp_pay_fine(3, @result);
+SELECT @result;  -- '成功：已缴纳罚款 ¥4.50'
+
+-- 注册（需要有效邀请码）
+CALL sp_register_user('newuser', 'mypassword', 'READ-2025-XXXXXXXX',
+                      '张三', '男', '13800138000', '本科生');
+
+-- 借书（带死锁自动重试）
+CALL sp_borrow_book_safe(1, 5, 1, @result);
+SELECT @result;
+```
 
 ---
 
 ## 👁️ 视图（5个）
 
-| 视图 | 用途 |
-|------|------|
-| `v_current_borrow` | 当前借阅中的记录（含剩余天数、是否续借） |
-| `v_overdue_readers` | 逾期读者名单（含联系电话、预计罚款金额） |
-| `v_book_borrow_stats` | 图书借阅统计（累计借阅次数/在借数/逾期次数） |
-| `v_reader_summary` | 读者借阅概况（在借数/逾期数/历史逾期/未缴罚款） |
-| `v_fine_detail` | 罚款明细（读者/图书/金额/缴纳状态） |
+| 视图 | 用途 | 关联表 | 典型使用场景 |
+|------|------|--------|------------|
+| `v_current_borrow` | 当前借阅中的记录 | Reader + Book + BorrowRecord | 管理员查看在借情况、读者查看自己的借阅 |
+| `v_overdue_readers` | 逾期读者名单 | Reader + Book + BorrowRecord + Rule | 催还提醒、逾期报表 |
+| `v_book_borrow_stats` | 图书借阅统计 | Book + Author + BorrowRecord | 热门图书排行、馆藏利用率分析 |
+| `v_reader_summary` | 读者借阅概况 | Reader + BorrowRecord + Fine | 读者个人中心、信用评估 |
+| `v_fine_detail` | 罚款明细 | Fine + BorrowRecord + Reader + Book | 财务对账、罚款管理 |
+
+### 视图查询示例
+
+```sql
+-- 查看当前所有借阅中的记录
+SELECT * FROM v_current_borrow;
+
+-- 查看逾期读者及预估罚款
+SELECT reader_name, phone, book_name, overdue_days, estimated_fine
+FROM v_overdue_readers ORDER BY overdue_days DESC;
+
+-- 查看借阅次数最多的图书
+SELECT book_name, author_name, total_borrow_times
+FROM v_book_borrow_stats ORDER BY total_borrow_times DESC LIMIT 10;
+
+-- 查看有未缴罚款的读者
+SELECT reader_name, reader_type, unpaid_fine
+FROM v_reader_summary WHERE unpaid_fine > 0;
+```
 
 ---
 
-## 🔒 系统安全（06）
+## 🔒 系统安全设计（06_系统安全.sql）
 
-| 机制 | 实现方式 |
-|------|----------|
-| CHECK 约束 | role / gender / status / borrow_status / available_count / fine_amount |
-| 权限隔离 | 3个MySQL用户按最小权限GRANT |
-| 审计日志 | AuditLog 表 + 4个触发器自动记录关键操作（JSON详情） |
+### 一、CHECK 约束 — 数据完整性加固
 
-### 数据库用户权限
+CHECK 约束在数据库层面限制数据合法性，不管数据从哪个入口写入（存储过程、后端代码、手动SQL），不符合约束一律拒绝：
 
-| MySQL 用户 | 对应角色 | 权限 |
-|------------|----------|------|
-| `lib_admin`@localhost | 系统管理员 | ALL PRIVILEGES |
-| `lib_staff`@localhost | 图书管理员 | 图书CRUD + 借阅操作 + 业务存储过程 |
-| `lib_reader`@localhost | 读者 | 全表SELECT + 借书/续借/登录存储过程 |
+| 约束名 | 约束表 | 约束内容 | 设计目的 |
+|--------|--------|----------|----------|
+| `chk_user_role` | User | role IN ('系统管理员','图书管理员','读者') | 防止插入非法角色 |
+| `chk_invite_role` | InviteCode | role IN ('系统管理员','图书管理员','读者') | 邀请码角色与User表对齐 |
+| `chk_available_count` | Book | available_count >= 0 | 库存不可为负数 |
+| `chk_total_count` | Book | total_count >= 0 | 馆藏总量不可为负数 |
+| `chk_reader_gender` | Reader | gender IN ('男','女') | 性别规范化 |
+| `chk_reader_status` | Reader | status IN ('正常','挂失','注销') | 状态枚举约束 |
+| `chk_borrow_status` | BorrowRecord | borrow_status IN ('借阅中','已归还','逾期') | 借阅状态枚举约束 |
+| `chk_fine_amount` | Fine | fine_amount > 0 | 罚款金额必须为正数 |
+
+### 二、数据库用户权限控制 — 最小权限原则
+
+创建三个 MySQL 数据库用户，按角色分配最小必要权限：
+
+| MySQL 用户 | 对应角色 | 权限说明 |
+|------------|----------|----------|
+| `lib_admin`@localhost | 系统管理员 | `ALL PRIVILEGES ON library_db.*` — 可执行所有操作 |
+| `lib_staff`@localhost | 图书管理员 | 图书表CRUD + BorrowRecord的SELECT/INSERT/UPDATE + Fine的SELECT/UPDATE + 4个业务存储过程的EXECUTE |
+| `lib_reader`@localhost | 读者 | 全表SELECT（只读） + sp_borrow_book/sp_renew_book的EXECUTE |
+
+**权限隔离细节**：
+
+```
+lib_staff（图书管理员）:
+  ✅ Book/Author/Publisher/Category → SELECT, INSERT, UPDATE, DELETE
+  ✅ BorrowRecord → SELECT, INSERT, UPDATE（无DELETE：借阅历史不可删除）
+  ✅ Fine → SELECT, UPDATE（无INSERT/DELETE：罚款只能由触发器生成）
+  ✅ Reader/Rule → SELECT（只读）
+  ✅ sp_borrow_book, sp_return_book, sp_renew_book, sp_pay_fine → EXECUTE
+  ❌ User/InviteCode → 无任何权限（账号管理归系统管理员）
+
+lib_reader（读者）:
+  ✅ 所有业务表 → SELECT（可查看图书信息、自己的借阅和罚款）
+  ✅ sp_borrow_book, sp_renew_book → EXECUTE（可自助借书和续借）
+  ❌ 不能直接INSERT/UPDATE/DELETE任何表
+  ❌ 不能调用sp_return_book, sp_pay_fine（还书和缴费由管理员操作）
+```
+
+**安全意义**：即使后端存在SQL注入漏洞，攻击者通过读者账号连接数据库，也只能执行SELECT查询和有限的存储过程调用，无法删除数据或修改其他用户信息。
+
+### 三、审计日志 — 操作留痕
+
+**AuditLog 表结构**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| log_id | INT, PK | 日志编号 |
+| operation_type | VARCHAR(30) | 操作类型：借书/还书/续借/缴费/用户创建 |
+| operator_table | VARCHAR(50) | 操作涉及的表名 |
+| target_id | INT | 被操作记录的主键ID |
+| detail | TEXT | 操作详情（JSON格式，便于解析） |
+| operation_time | DATETIME | 操作时间（自动记录） |
+
+**审计触发器工作原理**：通过 AFTER 触发器自动记录，应用层无需任何额外代码。所有关键操作（借书、还书、续借、缴费、用户创建）都会自动产生审计记录，不可跳过、不可篡改。
+
+```sql
+-- 查看最近的审计日志
+SELECT operation_type, detail, operation_time
+FROM AuditLog ORDER BY operation_time DESC LIMIT 20;
+
+-- 查看某读者的所有操作记录
+SELECT * FROM AuditLog
+WHERE JSON_EXTRACT(detail, '$.reader_id') = 5;
+```
 
 ---
 
-## 🔄 并发控制（07）
+## 🔄 并发控制设计（07_并发控制.sql）
 
-| 策略 | 说明 |
-|------|------|
-| 悲观锁 | `SELECT ... FOR UPDATE` 锁定目标行，防止超借/重复还书/重复缴费 |
-| 显式事务 | 借/还/续/缴费全部 `START TRANSACTION` + `COMMIT`/`ROLLBACK` |
-| 死锁处理 | `sp_borrow_book_safe` 捕获错误码 1213，自动重试最多3次 |
-| 统一加锁顺序 | Reader → Book → BorrowRecord → Fine，避免交叉等待 |
-| 异常兜底 | `EXIT HANDLER FOR SQLEXCEPTION` → ROLLBACK + 返回失败信息 |
+### 一、解决的并发问题
+
+| 问题 | 场景描述 | 后果 |
+|------|----------|------|
+| 超借 | 最后1本库存，两人同时借 | available_count 变为负数，一本书被借出两次 |
+| 重复还书 | 同一记录两个请求同时到达 | 库存加两次，罚款可能生成两条 |
+| 重复缴费 | 同一罚款被缴两次 | 财务数据错误 |
+| 重复续借 | 并发请求导致续借两次 | due_date 被延长两倍 |
+
+### 二、悲观锁方案（SELECT ... FOR UPDATE）
+
+核心思想：在读取数据时就加排他锁，保证"读取-判断-修改"这个过程中间不会被其他事务插入。
+
+```sql
+-- 借书存储过程中的关键代码：
+START TRANSACTION;
+
+-- ★ FOR UPDATE 锁定图书行，其他事务尝试借同一本书会被阻塞
+SELECT available_count INTO v_available
+FROM Book WHERE book_id = p_book_id
+FOR UPDATE;
+
+IF v_available <= 0 THEN
+    ROLLBACK;  -- 库存不足，回滚释放锁
+ELSE
+    INSERT INTO BorrowRecord ...;  -- 触发器自动扣库存
+    COMMIT;  -- 提交并释放锁
+END IF;
+```
+
+**效果**：事务A先获得锁 → 读到库存=1 → 借书成功 → COMMIT释放锁 → 事务B获得锁 → 读到库存=0 → 返回"库存不足"。
+
+### 三、显式事务 + 异常处理
+
+```sql
+DECLARE EXIT HANDLER FOR SQLEXCEPTION
+BEGIN
+    ROLLBACK;
+    SET p_result = '失败：系统异常，请重试';
+END;
+
+START TRANSACTION;
+-- ... 业务逻辑 ...
+COMMIT;
+```
+
+所有操作要么全部成功（COMMIT），要么全部撤销（ROLLBACK）。不会出现"记录插入了但库存没扣"的中间状态。
+
+### 四、死锁防范（三层保护）
+
+| 层级 | 策略 | 实现方式 |
+|------|------|----------|
+| **预防** | 统一加锁顺序 | 所有存储过程按 Reader → Book → BorrowRecord → Fine 固定顺序加锁 |
+| **检测** | InnoDB自动检测 | `innodb_deadlock_detect = ON`（默认），检测到死锁立刻回滚一个事务 |
+| **恢复** | 自动重试 | `sp_borrow_book_safe` 捕获错误码1213，自动重试最多3次 |
+
+**死锁演示步骤**（答辩用）：
+
+```sql
+-- 会话1：锁住书1
+START TRANSACTION;
+SELECT * FROM Book WHERE book_id = 1 FOR UPDATE;
+
+-- 会话2：锁住书2，再尝试锁书1（被阻塞）
+START TRANSACTION;
+SELECT * FROM Book WHERE book_id = 2 FOR UPDATE;
+SELECT * FROM Book WHERE book_id = 1 FOR UPDATE;  -- ⏳ 等待
+
+-- 回到会话1：尝试锁书2 → 死锁形成
+SELECT * FROM Book WHERE book_id = 2 FOR UPDATE;
+-- 💥 ERROR 1213: Deadlock found when trying to get lock
+
+-- 查看死锁详情：
+SHOW ENGINE INNODB STATUS;
+```
+
+### 五、并发控制总结
+
+```
+请求到达 → 开启事务 → FOR UPDATE 锁定目标行
+    → 其他事务被阻塞等待
+        → 校验业务规则
+            → 通过 → 执行修改 → COMMIT 释放锁
+            → 不通过 → ROLLBACK 释放锁
+    → 阻塞的事务获得锁 → 重新读取最新数据 → 继续判断
+```
 
 ---
 
-## 💾 备份同步（08）
+## 💾 备份同步（08_同步更新backup触发器.sql）
 
-- 通过触发器实现主库到备份库的**实时同步**
+### 设计思路
+
+通过触发器实现主库到备份库的**实时同步**，相当于一个应用层面的简易主从复制：
+
 - 备份库名：`library_db_backup`
-- 覆盖所有10张表的 INSERT / UPDATE / DELETE 操作
-- 使用前需先创建备份库并建立相同表结构
+- 覆盖所有 10 张表的 INSERT / UPDATE / DELETE 操作
+- 每张表 3 个触发器，共 **30 个触发器**
+- 命名规范：`trg_backup_<表名>_<insert|update|delete>`
+
+### 使用前提
+
+```sql
+-- 1. 创建备份库
+CREATE DATABASE `library_db_backup` DEFAULT CHARSET utf8mb4;
+
+-- 2. 在备份库中创建相同的表结构
+USE library_db_backup;
+source sql/01_图书模块_建表.sql;
+source sql/02_借阅模块_建表.sql;
+
+-- 3. 在主库上安装同步触发器
+USE library_db;
+source sql/08_同步更新backup触发器.sql;
+```
+
+### 同步机制
+
+| 操作 | 触发器行为 |
+|------|-----------|
+| INSERT | 将 NEW 行的所有字段同步 INSERT 到备份库对应表 |
+| UPDATE | 按主键定位备份库中的对应行，UPDATE 为 NEW 值 |
+| DELETE | 按主键从备份库中 DELETE 对应行 |
+
+---
+
+## 📐 索引设计
+
+| 索引名 | 所在表 | 索引字段 | 优化场景 |
+|--------|--------|----------|----------|
+| `idx_borrow_reader` | BorrowRecord | reader_id | 查询读者的借阅记录 |
+| `idx_borrow_book` | BorrowRecord | book_id | 查询图书的借阅历史 |
+| `idx_borrow_status` | BorrowRecord | borrow_status | 筛选"借阅中"/"逾期"记录 |
+| `idx_fine_paid` | Fine | is_paid | 查询未缴罚款 |
+| `idx_invite_used` | InviteCode | is_used | 查询可用邀请码 |
+| `idx_invite_expire` | InviteCode | expire_time | 过期邀请码清理 |
+| `idx_audit_type` | AuditLog | operation_type | 按操作类型筛选日志 |
+| `idx_audit_time` | AuditLog | operation_time | 按时间范围查询日志 |
 
 ---
 
@@ -185,21 +415,6 @@ source query/05_展示查询.sql;
 | 成员 | 负责表 | SQL对象 | 其他 |
 |------|--------|---------|------|
 | **A** | Author / Publisher / Category / Book（4张） | 5个视图 + 展示查询脚本 | E-R图（图书部分）+ 范式分析 + 大关系存储策略 |
-| **B** | Reader / Rule / BorrowRecord / Fine / User / InviteCode（6张） | 3触发器 + 7存储过程 + 30备份触发器 + 4审计触发器 | E-R图（借阅部分）+ 安全设计 + 并发控制 |
+| **B** | Reader / Rule / BorrowRecord / Fine / User / InviteCode（6张） | 3业务触发器 + 6存储过程 + 30备份触发器 + 4审计触发器 | E-R图（借阅部分）+ 安全设计 + 并发控制 |
 
 ---
-
-## 📝 与前端/后端的对接
-
-### 前端
-
-- 借/还/续/缴费接口的参数和返回格式不变，底层已加并发保护
-- 审计日志可通过查询 `AuditLog` 表获取操作记录
-
-### 后端
-
-- 按角色使用对应 MySQL 用户连接数据库（最小权限原则）
-- 注册：`CALL sp_register_user(...)` — 邀请码验证 + 事务保护
-- 存储过程内部已处理事务和锁，后端无需额外 `@Transactional`
-- 借书只需传 reader_id + book_id，存储过程根据 reader_type 自动匹配规则
-- 如需死锁重试保护，调用 `sp_borrow_book_safe` 替代 `sp_borrow_book`
