@@ -83,7 +83,7 @@ source query/05_展示查询.sql;
 | Reader | 读者信息 | 120 | B |
 | Rule | 借阅规则 | 100 | B |
 | BorrowRecord | 借阅记录（大关系） | 150 | B |
-| Fine | 罚款记录 | 110 | B |
+| Fine | 罚款记录 | 26 | B |
 | User | 系统用户（登录认证） | 130 | B |
 | InviteCode | 邀请码（注册权限控制） | 108 | B |
 
