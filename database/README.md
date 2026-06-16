@@ -87,7 +87,184 @@ source query/05_展示查询.sql;
 | User | 系统用户（登录认证） | 130 | B |
 | InviteCode | 邀请码（注册权限控制） | 108 | B |
 
-> 合计 **1160 条**测试数据，覆盖正常、边界、异常等多种场景。
+> 合计 **1076 条**测试数据，覆盖正常、边界、异常等多种场景。
+
+---
+
+## 📋 关系模式与字段定义
+
+### 1. 作者表 Author
+
+```
+Author(author_id, author_name, country, introduction)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| author_id | INT | PK, AUTO_INCREMENT | 作者编号 |
+| author_name | VARCHAR(100) | NOT NULL | 作者姓名 |
+| country | VARCHAR(50) | | 国籍 |
+| introduction | TEXT | | 简介 |
+
+### 2. 出版社表 Publisher
+
+```
+Publisher(publisher_id, publisher_name, address, phone)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| publisher_id | INT | PK, AUTO_INCREMENT | 出版社编号 |
+| publisher_name | VARCHAR(100) | NOT NULL | 出版社名称 |
+| address | VARCHAR(200) | | 地址 |
+| phone | VARCHAR(20) | | 联系电话 |
+
+### 3. 图书分类表 Category
+
+```
+Category(category_id, category_name, description)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| category_id | INT | PK, AUTO_INCREMENT | 分类编号 |
+| category_name | VARCHAR(50) | UNIQUE, NOT NULL | 分类名称 |
+| description | VARCHAR(255) | | 分类描述 |
+
+### 4. 图书表 Book
+
+```
+Book(book_id, isbn, book_name, author_id, category_id, publisher_id, publish_date, price, total_count, available_count, status)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| book_id | INT | PK, AUTO_INCREMENT | 图书编号 |
+| isbn | VARCHAR(20) | UNIQUE, NOT NULL | 国际标准书号 |
+| book_name | VARCHAR(200) | NOT NULL | 书名 |
+| author_id | INT | FK → Author | 作者编号 |
+| category_id | INT | FK → Category | 分类编号 |
+| publisher_id | INT | FK → Publisher | 出版社编号 |
+| publish_date | DATE | | 出版日期 |
+| price | DECIMAL(8,2) | | 定价 |
+| total_count | INT | NOT NULL, DEFAULT 0 | 馆藏总量 |
+| available_count | INT | NOT NULL, DEFAULT 0 | 可借数量 |
+| status | VARCHAR(20) | DEFAULT '在馆' | 图书状态 |
+
+### 5. 读者表 Reader
+
+```
+Reader(reader_id, reader_name, gender, phone, reader_type, register_date, status)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| reader_id | INT | PK, AUTO_INCREMENT | 读者编号 |
+| reader_name | VARCHAR(50) | NOT NULL | 姓名 |
+| gender | VARCHAR(10) | | 性别（男/女） |
+| phone | VARCHAR(20) | | 联系电话 |
+| reader_type | VARCHAR(20) | NOT NULL | 类型（本科生/研究生/教师/校外人员） |
+| register_date | DATE | NOT NULL | 注册日期 |
+| status | VARCHAR(20) | DEFAULT '正常' | 状态（正常/挂失/注销） |
+
+### 6. 借阅规则表 Rule
+
+```
+Rule(rule_id, reader_type, max_borrow_days, max_borrow_count, fine_per_day, max_renew_times, renew_days)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| rule_id | INT | PK, AUTO_INCREMENT | 规则编号 |
+| reader_type | VARCHAR(20) | NOT NULL | 适用读者类型 |
+| max_borrow_days | INT | NOT NULL | 最长借阅天数 |
+| max_borrow_count | INT | NOT NULL | 最大借阅数量 |
+| fine_per_day | DECIMAL(10,2) | NOT NULL | 每日逾期罚款 |
+| max_renew_times | INT | NOT NULL | 最大续借次数 |
+| renew_days | INT | NOT NULL | 续借天数 |
+
+### 7. 借阅记录表 BorrowRecord
+
+```
+BorrowRecord(borrow_id, reader_id, book_id, rule_id, borrow_date, due_date, return_date, is_renewed, overdue_days, borrow_status)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| borrow_id | INT | PK, AUTO_INCREMENT | 借阅编号 |
+| reader_id | INT | FK → Reader, NOT NULL | 读者编号 |
+| book_id | INT | FK → Book, NOT NULL | 图书编号 |
+| rule_id | INT | FK → Rule, NOT NULL | 规则编号 |
+| borrow_date | DATE | NOT NULL | 借阅日期 |
+| due_date | DATE | NOT NULL | 应还日期 |
+| return_date | DATE | | 实际归还日期 |
+| is_renewed | BOOLEAN | DEFAULT FALSE | 是否已续借 |
+| overdue_days | INT | DEFAULT 0 | 逾期天数 |
+| borrow_status | VARCHAR(20) | DEFAULT '借阅中' | 状态（借阅中/已归还/逾期） |
+
+### 8. 罚款表 Fine
+
+```
+Fine(fine_id, borrow_id, fine_amount, is_paid, create_date, pay_date)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| fine_id | INT | PK, AUTO_INCREMENT | 罚款编号 |
+| borrow_id | INT | FK → BorrowRecord, UNIQUE, NOT NULL | 关联借阅记录（一对一） |
+| fine_amount | DECIMAL(10,2) | NOT NULL | 罚款金额 |
+| is_paid | BOOLEAN | DEFAULT FALSE | 是否已缴纳 |
+| create_date | DATE | NOT NULL | 生成日期 |
+| pay_date | DATE | | 缴纳日期 |
+
+### 9. 系统用户表 User
+
+```
+User(user_id, username, password, role, reader_id, create_time, last_login, is_active)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| user_id | INT | PK, AUTO_INCREMENT | 用户编号 |
+| username | VARCHAR(50) | UNIQUE, NOT NULL | 用户名 |
+| password | VARCHAR(255) | NOT NULL | 密码 |
+| role | VARCHAR(20) | NOT NULL | 角色（系统管理员/图书管理员/读者） |
+| reader_id | INT | FK → Reader, DEFAULT NULL | 关联读者（管理员为NULL） |
+| create_time | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| last_login | DATETIME | | 最后登录时间 |
+| is_active | BOOLEAN | DEFAULT TRUE | 是否启用 |
+
+### 10. 邀请码表 InviteCode
+
+```
+InviteCode(code_id, code, role, created_by, used_by, is_used, create_time, expire_time)
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| code_id | INT | PK, AUTO_INCREMENT | 邀请码编号 |
+| code | VARCHAR(32) | UNIQUE, NOT NULL | 邀请码（随机字符串） |
+| role | VARCHAR(20) | NOT NULL | 对应角色（系统管理员/图书管理员/读者） |
+| created_by | INT | FK → User, DEFAULT NULL | 生成该邀请码的管理员 user_id |
+| used_by | INT | FK → User, DEFAULT NULL | 使用该邀请码注册的 user_id |
+| is_used | BOOLEAN | DEFAULT FALSE | 是否已使用 |
+| create_time | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| expire_time | DATETIME | NOT NULL | 过期时间 |
+
+### 表间外键关系
+
+| 外键 | 来源表.字段 | 目标表.字段 | 关系 |
+|------|------------|------------|------|
+| fk_book_author | Book.author_id | Author.author_id | 多对一 |
+| fk_book_category | Book.category_id | Category.category_id | 多对一 |
+| fk_book_publisher | Book.publisher_id | Publisher.publisher_id | 多对一 |
+| fk_borrow_reader | BorrowRecord.reader_id | Reader.reader_id | 多对一 |
+| fk_borrow_book | BorrowRecord.book_id | Book.book_id | 多对一 |
+| fk_borrow_rule | BorrowRecord.rule_id | Rule.rule_id | 多对一 |
+| fk_fine_borrow | Fine.borrow_id | BorrowRecord.borrow_id | 一对一 |
+| fk_user_reader | User.reader_id | Reader.reader_id | 多对一 |
+| fk_invite_created_by | InviteCode.created_by | User.user_id | 多对一 |
+| fk_invite_used_by | InviteCode.used_by | User.user_id | 多对一 |
 
 ---
 
