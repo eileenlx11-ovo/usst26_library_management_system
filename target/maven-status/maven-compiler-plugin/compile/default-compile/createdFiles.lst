@@ -2,4 +2,6 @@ com\lib\controller\systemadmin\AdminController.class
 com\lib\controller\systemadmin\InviteCodeController.class
 com\lib\controller\systemadmin\ToolController.class
 com\lib\controller\systemadmin\BorrowController.class
+com\lib\entity\User.class
+com\lib\controller\AuthController.class
 com\lib\controller\systemadmin\BookController.class
