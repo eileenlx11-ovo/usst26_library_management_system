@@ -299,9 +299,9 @@ SELECT * FROM v_fine_detail;
 
 -- 9.1 演示借书存储过程
 SELECT '【存储过程演示：借书 sp_borrow_book】' AS 演示;
-SELECT '操作：读者"刘子轩"(id=5) 借阅《围城》(id=10)' AS 说明;
+SELECT '操作：读者"刘子轩"(id=5) 借阅《围城》(id=10)，自动匹配读者类型对应的借阅规则' AS 说明;
 
-CALL sp_borrow_book(5, 10, 1, @borrow_result);
+CALL sp_borrow_book(5, 10, @borrow_result);
 SELECT @borrow_result AS 借书结果;
 
 -- 查看刚才的借阅记录
@@ -351,7 +351,7 @@ SELECT @pay_result AS 缴纳结果;
 SELECT '【存储过程错误处理演示】' AS 演示;
 
 -- 尝试借书给挂失读者
-CALL sp_borrow_book(18, 1, 1, @err_result1);
+CALL sp_borrow_book(18, 1, @err_result1);
 SELECT '借书给挂失读者' AS 场景, @err_result1 AS 结果;
 
 -- 尝试重复续借

@@ -25,11 +25,12 @@ DELIMITER $$
 CREATE PROCEDURE sp_borrow_book(
     IN p_reader_id INT,
     IN p_book_id INT,
-    IN p_rule_id INT,
     OUT p_result VARCHAR(100)
 )
 BEGIN
     DECLARE v_reader_status VARCHAR(20);
+    DECLARE v_reader_type VARCHAR(20);
+    DECLARE v_rule_id INT;
     DECLARE v_available INT;
     DECLARE v_current_count INT;
     DECLARE v_max_count INT;
@@ -44,8 +45,8 @@ BEGIN
 
     START TRANSACTION;
 
-    -- 检查读者状态（共享读取即可，读者状态不会频繁并发修改）
-    SELECT status INTO v_reader_status
+    -- 检查读者状态，同时取出 reader_type
+    SELECT status, reader_type INTO v_reader_status, v_reader_type
     FROM Reader WHERE reader_id = p_reader_id;
 
     IF v_reader_status IS NULL THEN
@@ -55,41 +56,48 @@ BEGIN
         SET p_result = CONCAT('失败：读者状态异常（', v_reader_status, '）');
         ROLLBACK;
     ELSE
-        -- ★ 关键：使用 FOR UPDATE 对 Book 行加排他锁
-        -- 其他事务尝试借同一本书时会阻塞在此，直到本事务提交/回滚
-        SELECT available_count INTO v_available
-        FROM Book WHERE book_id = p_book_id
-        FOR UPDATE;
+        -- ★ 根据 reader_type 自动匹配借阅规则
+        SELECT rule_id, max_borrow_count, max_borrow_days
+        INTO v_rule_id, v_max_count, v_max_days
+        FROM Rule WHERE reader_type = v_reader_type
+        LIMIT 1;
 
-        IF v_available IS NULL THEN
-            SET p_result = '失败：图书不存在';
-            ROLLBACK;
-        ELSEIF v_available <= 0 THEN
-            SET p_result = '失败：图书无可借库存';
+        IF v_rule_id IS NULL THEN
+            SET p_result = CONCAT('失败：未找到"', v_reader_type, '"对应的借阅规则');
             ROLLBACK;
         ELSE
-            -- 检查借阅数量上限
-            SELECT max_borrow_count, max_borrow_days
-            INTO v_max_count, v_max_days
-            FROM Rule WHERE rule_id = p_rule_id;
+            -- ★ 关键：使用 FOR UPDATE 对 Book 行加排他锁
+            -- 其他事务尝试借同一本书时会阻塞在此，直到本事务提交/回滚
+            SELECT available_count INTO v_available
+            FROM Book WHERE book_id = p_book_id
+            FOR UPDATE;
 
-            SELECT COUNT(*) INTO v_current_count
-            FROM BorrowRecord
-            WHERE reader_id = p_reader_id AND borrow_status = '借阅中';
-
-            IF v_current_count >= v_max_count THEN
-                SET p_result = CONCAT('失败：已达借阅上限（', v_max_count, '本）');
+            IF v_available IS NULL THEN
+                SET p_result = '失败：图书不存在';
+                ROLLBACK;
+            ELSEIF v_available <= 0 THEN
+                SET p_result = '失败：图书无可借库存';
                 ROLLBACK;
             ELSE
-                -- 插入借阅记录（触发器自动扣库存，在同一事务内执行）
-                INSERT INTO BorrowRecord
-                (reader_id, book_id, rule_id, borrow_date, due_date, borrow_status)
-                VALUES
-                (p_reader_id, p_book_id, p_rule_id, CURDATE(),
-                 DATE_ADD(CURDATE(), INTERVAL v_max_days DAY), '借阅中');
+                -- 检查借阅数量上限
+                SELECT COUNT(*) INTO v_current_count
+                FROM BorrowRecord
+                WHERE reader_id = p_reader_id AND borrow_status = '借阅中';
 
-                COMMIT;
-                SET p_result = '成功：借阅完成';
+                IF v_current_count >= v_max_count THEN
+                    SET p_result = CONCAT('失败：已达借阅上限（', v_max_count, '本）');
+                    ROLLBACK;
+                ELSE
+                    -- 插入借阅记录（触发器自动扣库存，在同一事务内执行）
+                    INSERT INTO BorrowRecord
+                    (reader_id, book_id, rule_id, borrow_date, due_date, borrow_status)
+                    VALUES
+                    (p_reader_id, p_book_id, v_rule_id, CURDATE(),
+                     DATE_ADD(CURDATE(), INTERVAL v_max_days DAY), '借阅中');
+
+                    COMMIT;
+                    SET p_result = '成功：借阅完成';
+                END IF;
             END IF;
         END IF;
     END IF;
@@ -280,7 +288,6 @@ DELIMITER $$
 CREATE PROCEDURE sp_borrow_book_safe(
     IN p_reader_id INT,
     IN p_book_id INT,
-    IN p_rule_id INT,
     OUT p_result VARCHAR(100)
 )
 BEGIN
@@ -302,7 +309,7 @@ BEGIN
             END;
 
             -- 调用核心借书逻辑
-            CALL sp_borrow_book(p_reader_id, p_book_id, p_rule_id, p_result);
+            CALL sp_borrow_book(p_reader_id, p_book_id, p_result);
             SET v_done = TRUE;  -- 正常执行完毕，退出循环
         END;
     END WHILE;
@@ -368,11 +375,11 @@ DELIMITER ;
 假设 book_id=1 的 available_count=1（只剩最后一本）
 
 -- 会话1：
-    CALL sp_borrow_book(1, 1, 1, @r1);
+    CALL sp_borrow_book(1, 1, @r1);
     SELECT @r1;  -- 应该成功
 
 -- 会话2（几乎同时执行）：
-    CALL sp_borrow_book(2, 1, 1, @r2);
+    CALL sp_borrow_book(2, 1, @r2);
     SELECT @r2;  -- 应该返回"失败：图书无可借库存"
 
 原理：会话1先获得 Book(book_id=1) 的排他锁，
@@ -396,7 +403,7 @@ DELIMITER ;
 
 === 验证3：死锁重试测试 ===
 
-    CALL sp_borrow_book_safe(1, 1, 1, @result);
+    CALL sp_borrow_book_safe(1, 1, @result);
     SELECT @result;
     -- 即使发生死锁也会自动重试最多3次
 */

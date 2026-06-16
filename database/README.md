@@ -120,7 +120,7 @@ source query/05_展示查询.sql;
 
 | 存储过程 | 功能 | 关键特性 | 定义位置 |
 |----------|------|----------|----------|
-| `sp_borrow_book` | 借书 | FOR UPDATE 悲观锁 + 事务 + 校验状态/库存/上限 | 07 |
+| `sp_borrow_book` | 借书 | FOR UPDATE 悲观锁 + 事务 + 根据reader_type自动匹配规则 | 07 |
 | `sp_return_book` | 还书 | 事务 + 触发器联动（罚款+库存） | 07 |
 | `sp_renew_book` | 续借 | FOR UPDATE 防重复续借 | 07 |
 | `sp_pay_fine` | 缴罚款 | FOR UPDATE 防重复缴费 | 07 |
@@ -205,4 +205,5 @@ source query/05_展示查询.sql;
 - 登录：`CALL sp_login(username, password, @result, @user_id, @role)`
 - 注册：`CALL sp_register_user(...)` — 内部自动加盐加密
 - 存储过程内部已处理事务和锁，后端无需额外 `@Transactional`
+- 借书只需传 reader_id + book_id，存储过程根据 reader_type 自动匹配规则
 - 如需死锁重试保护，调用 `sp_borrow_book_safe` 替代 `sp_borrow_book`
