@@ -15,7 +15,7 @@ database/
 │   ├── 03_罚款触发器.sql                ← 3个触发器（逾期罚款 + 库存自动增减）
 │   ├── 04_用户注册存储过程.sql           ← sp_register_user（事务 + 邀请码验证）
 │   ├── 05_视图与存储过程.sql             ← 5个视图 + 4个存储过程（借/还/续/缴）
-│   ├── 06_系统安全.sql                  ← 密码加密 + CHECK约束 + GRANT权限 + 审计日志
+│   ├── 06_系统安全.sql                  ← CHECK约束 + GRANT权限 + 审计日志
 │   ├── 07_并发控制.sql                  ← 悲观锁 + 事务隔离 + 死锁重试
 │   └── 08_同步更新backup触发器.sql       ← 备份库实时同步（10张表×3操作=30个触发器）
 ├── data/                              ← 测试数据
@@ -55,7 +55,7 @@ source sql/03_罚款触发器.sql;
 source sql/04_用户注册存储过程.sql;
 source sql/05_视图与存储过程.sql;
 
--- 4. 系统安全（密码加密 + 权限 + 审计，会重建 sp_register_user）
+-- 4. 系统安全（CHECK约束 + 权限 + 审计）
 source sql/06_系统安全.sql;
 
 -- 5. 并发控制（重写存储过程为事务安全版本）
@@ -124,8 +124,7 @@ source query/05_展示查询.sql;
 | `sp_return_book` | 还书 | 事务 + 触发器联动（罚款+库存） | 07 |
 | `sp_renew_book` | 续借 | FOR UPDATE 防重复续借 | 07 |
 | `sp_pay_fine` | 缴罚款 | FOR UPDATE 防重复缴费 | 07 |
-| `sp_register_user` | 用户注册 | 事务 + 邀请码 + SHA2密码加密 | 06 |
-| `sp_login` | 登录验证 | 盐值哈希比对 + 更新 last_login | 06 |
+| `sp_register_user` | 用户注册 | 事务 + 邀请码验证 | 04 |
 | `sp_borrow_book_safe` | 借书（安全版） | 捕获死锁错误码1213，自动重试3次 | 07 |
 
 ---
@@ -146,7 +145,6 @@ source query/05_展示查询.sql;
 
 | 机制 | 实现方式 |
 |------|----------|
-| 密码加密 | SHA2-256 + 随机16位盐值（`fn_generate_salt` + `fn_hash_password`） |
 | CHECK 约束 | role / gender / status / borrow_status / available_count / fine_amount |
 | 权限隔离 | 3个MySQL用户按最小权限GRANT |
 | 审计日志 | AuditLog 表 + 4个触发器自动记录关键操作（JSON详情） |
@@ -195,15 +193,13 @@ source query/05_展示查询.sql;
 
 ### 前端
 
-- 登录接口：前端发送明文密码，后端调用 `sp_login` 做哈希验证
 - 借/还/续/缴费接口的参数和返回格式不变，底层已加并发保护
 - 审计日志可通过查询 `AuditLog` 表获取操作记录
 
 ### 后端
 
 - 按角色使用对应 MySQL 用户连接数据库（最小权限原则）
-- 登录：`CALL sp_login(username, password, @result, @user_id, @role)`
-- 注册：`CALL sp_register_user(...)` — 内部自动加盐加密
+- 注册：`CALL sp_register_user(...)` — 邀请码验证 + 事务保护
 - 存储过程内部已处理事务和锁，后端无需额外 `@Transactional`
 - 借书只需传 reader_id + book_id，存储过程根据 reader_type 自动匹配规则
 - 如需死锁重试保护，调用 `sp_borrow_book_safe` 替代 `sp_borrow_book`
