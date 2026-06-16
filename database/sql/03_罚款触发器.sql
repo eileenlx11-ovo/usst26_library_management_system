@@ -40,29 +40,45 @@ DELIMITER ;
 
 -- =============================================
 -- 触发器2：借出图书时自动扣减库存【新增】
--- 条件：INSERT 新借阅记录时，Book.available_count - 1
+-- 使用 BEFORE INSERT：在记录写入前检查库存，
+-- 若库存不足直接 SIGNAL 拒绝整个 INSERT，
+-- 保证不会出现"记录插入成功但库存未扣"的不一致
 -- =============================================
 DELIMITER $$
 
 CREATE TRIGGER trg_borrow_decrease_stock
-AFTER INSERT ON BorrowRecord
+BEFORE INSERT ON BorrowRecord
 FOR EACH ROW
 BEGIN
-    UPDATE Book
-    SET available_count = available_count - 1
-    WHERE book_id = NEW.book_id;
+    DECLARE v_available INT;
+
+    SELECT available_count INTO v_available
+    FROM Book WHERE book_id = NEW.book_id;
+
+    IF v_available IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = '借阅失败：图书不存在';
+    ELSEIF v_available <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = '借阅失败：该图书已无可借库存';
+    ELSE
+        UPDATE Book
+        SET available_count = available_count - 1
+        WHERE book_id = NEW.book_id;
+    END IF;
 END$$
 
 DELIMITER ;
 
 -- =============================================
 -- 触发器3：归还图书时自动恢复库存【新增】
--- 条件：return_date 从NULL变为非NULL时，Book.available_count + 1
+-- 使用 BEFORE UPDATE：在 BorrowRecord 更新前恢复库存，
+-- 与触发器2保持一致的 BEFORE 风格
 -- =============================================
 DELIMITER $$
 
 CREATE TRIGGER trg_return_increase_stock
-AFTER UPDATE ON BorrowRecord
+BEFORE UPDATE ON BorrowRecord
 FOR EACH ROW
 BEGIN
     IF NEW.return_date IS NOT NULL AND OLD.return_date IS NULL THEN

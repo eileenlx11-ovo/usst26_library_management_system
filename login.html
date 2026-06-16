@@ -60,6 +60,23 @@
                     <input type="password" id="regPasswordConfirm" placeholder="请再次输入密码">
                 </label>
             </div>
+            <!-- 读者额外信息（仅读者角色时显示） -->
+            <div id="readerExtraFields" style="margin-top:0.8rem;">
+                <div class="form-grid">
+                    <label>真实姓名
+                        <input type="text" id="regReaderName" placeholder="请输入真实姓名">
+                    </label>
+                    <label>性别
+                        <select id="regReaderGender"><option>男</option><option>女</option></select>
+                    </label>
+                    <label>电话
+                        <input type="text" id="regReaderPhone" placeholder="请输入联系电话">
+                    </label>
+                    <label>读者类型
+                        <select id="regReaderType"><option>本科生</option><option>研究生</option><option>教师</option><option>校外人员</option></select>
+                    </label>
+                </div>
+            </div>
             <!-- 邀请码区域（管理员时才显示） -->
             <div id="inviteCodeSection" style="display:none; margin-top:1rem;">
                 <label>邀请码

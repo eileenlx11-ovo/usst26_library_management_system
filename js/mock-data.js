@@ -54,9 +54,9 @@ const MockData = (function () {
             try { return JSON.parse(raw); } catch (e) { /* ignore */ }
         }
         return [
-            { username: "admin", password: "123456", role: "系统管理员" },
-            { username: "manager01", password: "123456", role: "图书管理员" },
-            { username: "reader01", password: "123456", role: "读者" }
+            { username: "admin", password: "admin123", role: "系统管理员", readerId: null, userId: 1 },
+            { username: "lib_manager1", password: "libmgr123", role: "图书管理员", readerId: null, userId: 2 },
+            { username: "chensiyuan", password: "csy12345", role: "读者", readerId: 1, userId: 5 }
         ];
     }
 

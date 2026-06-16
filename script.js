@@ -19,10 +19,17 @@ async function login() {
     const password = document.getElementById("loginPassword").value;
     const role = document.getElementById("loginRole").value;
     if (!username || !password) { showToast("用户名和密码不能为空。"); return; }
+
+    // 只走后端 API，不再回退本地
     const res = await authApi.login(username, password, role);
     if (res.success && res.data) {
-        setSession({ username: res.data.username, role: res.data.role, readerId: res.data.readerId });
+        setSession({ username: res.data.username, role: res.data.role, readerId: res.data.readerId, userId: res.data.userId });
         window.location.href = "index.html";
+        return;
+    }
+
+    if (res.message === '网络错误' || res.message.includes('无法连接')) {
+        showToast("后端未启动，请先在IDEA中运行LibrarySystemApplication。");
     } else {
         showToast(res.message || "登录失败");
     }
@@ -52,9 +59,9 @@ function showLoginForm() {
 function onRegRoleChange() {
     const role = document.getElementById("regRole").value;
     const inviteSection = document.getElementById("inviteCodeSection");
-    if (inviteSection) {
-        inviteSection.style.display = role === "读者" ? "none" : "";
-    }
+    const readerFields = document.getElementById("readerExtraFields");
+    if (inviteSection) inviteSection.style.display = role === "读者" ? "none" : "";
+    if (readerFields) readerFields.style.display = role === "读者" ? "" : "none";
 }
 
 async function register() {
@@ -67,8 +74,14 @@ async function register() {
     if (password.length < 4) { showToast("密码长度不能少于4位。"); return; }
     if (password !== passwordConfirm) { showToast("两次输入的密码不一致。"); return; }
 
+    // 读者额外信息
+    const readerName = role === "读者" ? (document.getElementById("regReaderName")?.value.trim() || username) : "";
+    const readerGender = document.getElementById("regReaderGender")?.value || "男";
+    const readerPhone = document.getElementById("regReaderPhone")?.value.trim() || "";
+    const readerType = document.getElementById("regReaderType")?.value || "本科生";
+
     const inviteCode = role !== "读者" ? document.getElementById("regInviteCode")?.value.trim() || "" : "";
-    const res = await authApi.register(username, password, role, inviteCode);
+    const res = await authApi.register(username, password, role, inviteCode, readerName, readerGender, readerPhone, readerType);
     if (res.success) {
         showToast("注册成功！欢迎，" + role + "「" + username + "」。");
         setTimeout(() => { showLoginForm(); document.getElementById("loginUsername").value = username; }, 2000);
@@ -278,6 +291,9 @@ function openProfileModal() {
     document.getElementById("profileOldUsername").value = session.username;
     document.getElementById("profileUsername").value = session.username;
     document.getElementById("profilePassword").value = "";
+    // 显示读者ID
+    const ridEl = document.getElementById("profileReaderId");
+    if (ridEl) ridEl.textContent = session.role === '读者' && session.readerId ? '读者ID: ' + session.readerId : '';
     pendingAvatarData = null;
     const preview = document.getElementById("profileAvatarPreview");
     if (preview) {
@@ -311,30 +327,42 @@ function handleAvatarUpload(event) {
     reader.readAsDataURL(file);
 }
 
-function saveProfile() {
+async function saveProfile() {
     const session = getSession();
     if (!session) { showToast("会话过期，请重新登录。"); window.location.href = "login.html"; return; }
-    const oldUsername = document.getElementById("profileOldUsername").value.trim();
     const newUsername = document.getElementById("profileUsername").value.trim();
     const newPassword = document.getElementById("profilePassword").value;
     if (!newUsername) { showToast("用户名不能为空。"); return; }
 
+    // 同时更新 localStorage 和数据库
     const users = MockData.users;
-    const idx = users.findIndex(u => u.username === oldUsername && u.role === session.role);
+    const idx = users.findIndex(u => u.username === session.username && u.role === session.role);
     if (idx >= 0) {
         users[idx].username = newUsername;
         if (newPassword) users[idx].password = newPassword;
         if (pendingAvatarData) users[idx].avatar = pendingAvatarData;
     }
+    MockData.users = users;
     session.username = newUsername;
     if (newPassword) session.password = newPassword;
     if (pendingAvatarData) session.avatar = pendingAvatarData;
-
-    MockData.users = users;
     setSession(session);
+
+    // 同步到数据库 User 表
+    const res = await adminApi.updateUser({
+        userId: session.userId,
+        username: newUsername,
+        role: session.role,
+        isActive: true
+    });
+
     renderSidebar();
     closeProfileModal();
-    showToast("个人信息已保存。");
+    if (res.success) {
+        showToast("个人信息已保存（数据库已同步）。");
+    } else {
+        showToast("个人信息已保存（仅本地——数据库更新失败：" + (res.message || '后端未启动') + "）");
+    }
 }
 
 // ===================== 分页渲染 =====================
@@ -378,24 +406,28 @@ async function loadDashboard() {
     const borrowRes = await apiGet('/bookadmin/borrow/list');
     if (borrowRes.success && borrowRes.data) {
         let records = borrowRes.data;
-        if (isReader) {
-            const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
-            if (reader) records = records.filter(r => r.readerId === reader.id);
+        if (isReader && session.readerId) {
+            records = records.filter(r => r.readerId === session.readerId);
         }
         activeCount = records.filter(r => r.borrowStatus !== "已归还").length;
     }
 
-    // 3. 待缴罚款 — 从罚款API
+    // 3. 待缴罚款 = Fine表中未缴纳的实际金额
     const fineRes = await apiGet('/bookadmin/borrow/fines');
     if (fineRes.success && fineRes.data) {
         let fines = fineRes.data;
-        if (isReader) {
-            const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
-            if (reader) fines = fines.filter(f => f.readerId === reader.id);
+        if (isReader && session.readerId) {
+            fines = fines.filter(f => f.readerId === session.readerId);
         }
         unpaidFine = fines.filter(f => !f.isPaid).reduce((s, f) => s + (parseFloat(f.fineAmount) || 0), 0);
     }
 
+    // 读者重命名指标卡片
+    if (isReader) {
+        document.querySelector(".metric-card:nth-child(1) span").textContent = "馆藏总量";
+        document.querySelector(".metric-card:nth-child(3) strong").parentElement.querySelector("span").textContent = "我的借阅中";
+        document.querySelector(".metric-card:nth-child(4) strong").parentElement.querySelector("span").textContent = "我的待缴罚款";
+    }
     setMetric("metricBooks", totalBooks || MockData.books.reduce((s,b)=>s+(b.total||0),0));
     setMetric("metricAvailable", totalAvailable || MockData.books.reduce((s,b)=>s+(b.available||0),0));
     setMetric("metricBorrowing", activeCount);
@@ -486,7 +518,23 @@ async function loadBooks(page = 1) {
     });
     if (apiRes.success && apiRes.data && apiRes.data.records) {
         bookUseApi = true;
-        renderRows(apiRes.data.records, apiRes.data.total);
+        let records = apiRes.data.records;
+        // ID搜索：如果后端支持bookName模糊匹配不到数字ID，额外试一次精确查ID
+        const exactId = currentBookSearchParams._exactId;
+        if (exactId) {
+            const byId = await bookApi.getById(exactId);
+            if (byId.success && byId.data) {
+                // 看看当前页是否已经有了（通常后端bookName=''所以全量返回）
+                const already = records.find(r => r.id === exactId);
+                if (!already) records = [byId.data];
+                else records = [already];
+            }
+            // 如果API详情也失败，保留原列表（为空就空）
+        }
+        const avail = currentBookSearchParams._avail;
+        if (avail === 'available') records = records.filter(b => b.available > 0);
+        if (avail === 'empty') records = records.filter(b => b.available <= 0);
+        renderRows(records, exactId ? records.length : apiRes.data.total);
     } else {
         // mock回退
         const source = bookSearchResults || MockData.books;
@@ -519,12 +567,18 @@ function searchBooks() {
     const catId = document.getElementById("categoryFilter")?.value || "";
     const avail = document.getElementById("availabilityFilter")?.value || "";
 
+    // 纯数字当作按ID搜索
+    let _exactId = null;
+    if (kw && /^\d+$/.test(kw)) _exactId = Number(kw);
+
     currentBookSearchParams = {
-        bookName: kw,
+        bookName: _exactId ? '' : kw,
         authorName: '',
         isbn: '',
         categoryId: catId,
-        status: avail === 'available' ? '可借' : (avail === 'empty' ? '借空' : '')
+        status: '',
+        _avail: avail,
+        _exactId
     };
 
     if (bookUseApi) {
@@ -532,7 +586,12 @@ function searchBooks() {
     } else {
         const kwLower = kw.toLowerCase();
         let list = MockData.books;
-        if (kwLower) list = list.filter(b => (b.title + b.author + b.isbn + b.category).toLowerCase().includes(kwLower));
+        if (_exactId) {
+            const found = MockData.books.filter(b => b.id === _exactId);
+            list = found.length ? found : [];
+        } else if (kwLower) {
+            list = list.filter(b => (b.title + b.author + b.isbn + b.category).toLowerCase().includes(kwLower));
+        }
         if (catId) list = list.filter(b => String(b.category) === catId);
         if (avail === "available") list = list.filter(b => b.available > 0);
         if (avail === "empty") list = list.filter(b => b.available <= 0);
@@ -619,41 +678,20 @@ async function deleteBook(id) {
 
 function readerBorrowBook(bookId) {
     const session = getSession();
-    const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
-    if (!reader) { showToast("未找到读者信息"); return; }
-    borrowBookDirect(reader.id, bookId);
+    if (!session || !session.readerId) {
+        // 读者登录后 session 里存了 readerId
+        showToast("请用读者账号登录后借阅"); return;
+    }
+    borrowBookDirect(session.readerId, bookId);
 }
 
 // ==================== 借阅管理（borrow.html） ====================
 
 async function borrowBookDirect(readerId, bookId) {
-    const book = MockData.getBook(bookId);
-    const reader = MockData.getReader(readerId);
-    if (!book || !reader) { showToast("读者或图书不存在"); return; }
-    if (reader.status && reader.status !== "正常") { showToast("读者状态异常，无法借阅"); return; }
-    if (book.available <= 0) { showToast("该书无可借库存"); return; }
-
-    const rule = MockData.getRuleForType(reader.type || "学生");
-    const activeCount = MockData.borrowRecords.filter(r => r.readerId === readerId && r.borrowStatus !== "已归还").length;
-    if (activeCount >= rule.maxBorrowCount) { showToast("已达最大借阅数量"); return; }
-
-    // 尝试调用真实后端API
+    // 直接调后端API，后端会做所有校验
     const res = await borrowApi.lend(readerId, bookId);
     if (res.success) {
-        // 后端成功，更新本地状态
-        const record = {
-            borrowId: MockData.nextBorrowId(),
-            readerId, bookId, ruleId: rule.ruleId,
-            borrowDate: todayStr(),
-            dueDate: addDays(todayStr(), rule.maxBorrowDays),
-            returnDate: "", renewedTimes: 0, overdueDays: 0,
-            borrowStatus: "借阅中"
-        };
-        MockData.borrowRecords.push(record);
-        book.available = Math.max(0, book.available - 1);
-        book.borrowCount = (book.borrowCount || 0) + 1;
-        book.status = book.available > 0 ? "在馆" : "借空";
-        showToast(`借阅成功！《${book.title}》，应还日期 ${record.dueDate}`);
+        showToast("借阅成功！");
     } else {
         showToast("借阅失败：" + res.message);
     }
@@ -661,12 +699,10 @@ async function borrowBookDirect(readerId, bookId) {
 }
 
 async function quickBorrow() {
-    const cardId = document.getElementById("borrowReaderCard").value.trim();
+    const readerId = Number(document.getElementById("borrowReaderId").value);
     const bookId = Number(document.getElementById("borrowBookId").value);
-    if (!cardId || !bookId) { showToast("请输入借书证号和图书编号"); return; }
-    const reader = MockData.readers.find(r => r.cardId === cardId);
-    if (!reader) { showToast("未找到该借书证号"); return; }
-    await borrowBookDirect(reader.id, bookId);
+    if (!readerId || !bookId) { showToast("请输入读者ID和图书编号"); return; }
+    await borrowBookDirect(readerId, bookId);
     document.getElementById("borrowBookId").value = "";
 }
 
@@ -733,18 +769,24 @@ async function notifyOverdue() {
     }
 }
 
+let borrowIdSearchFilter = "";
+
+async function searchBorrowRecords() {
+    borrowIdSearchFilter = document.getElementById("borrowIdSearch")?.value.trim() || "";
+    loadBorrowRecords(document.getElementById("recordStatusFilter")?.value || "");
+}
+
 async function loadBorrowRecords(filterStatus = "") {
     const session = getSession();
     const tbody = document.getElementById("borrowListBody");
     if (!tbody) return;
 
     let records = [];
-    // 从后端取
     const isReader = session.role === "读者";
     if (isReader) {
-        const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
-        if (reader) {
-            const res = await apiGet('/bookadmin/borrow/list/' + reader.id);
+        const rid = session.readerId;
+        if (rid) {
+            const res = await apiGet('/bookadmin/borrow/list/' + rid);
             if (res.success && res.data) records = res.data;
         }
     } else {
@@ -753,6 +795,14 @@ async function loadBorrowRecords(filterStatus = "") {
     }
 
     if (filterStatus) records = records.filter(r => r.borrowStatus === filterStatus);
+
+    // 按借阅ID或读者ID筛选
+    if (borrowIdSearchFilter) {
+        records = records.filter(r =>
+            String(r.borrowId) === borrowIdSearchFilter ||
+            String(r.readerId) === borrowIdSearchFilter
+        );
+    }
 
     tbody.innerHTML = records.length ? records.map(r => {
         const canRenew = r.borrowStatus !== "已归还" && !r.isRenewed && r.renewedTimes < 1;
@@ -783,8 +833,8 @@ function renderFinesFromAPI(session, fines) {
     const tbody = document.getElementById("fineTableBody");
     if (!tbody) return;
     if (session.role === "读者") {
-        const reader = MockData.readers.find(r => r.name === session.username) || MockData.readers[0];
-        if (reader) fines = fines.filter(f => f.readerId === reader.id);
+        const rid = session.readerId;
+        if (rid) fines = fines.filter(f => f.readerId === rid);
     }
     tbody.innerHTML = fines.length ? fines.map(f => `<tr>
         <td>${f.fineId}</td><td>${f.borrowId}</td><td>${parseFloat(f.fineAmount||0).toFixed(2)}元</td>
@@ -812,6 +862,7 @@ function payFine(fineId) {
 }
 
 function refreshBorrowPage() {
+    borrowIdSearchFilter = "";
     const filter = document.getElementById("recordStatusFilter")?.value || "";
     loadBorrowRecords(filter);
 }
@@ -830,7 +881,7 @@ async function loadReaders(page = 1) {
     const res = await readerApi.list(document.getElementById("readerSearch")?.value || "");
     let list = [];
     if (res.success && res.data) {
-        list = res.data.map(r => ({ id: r.readerId, cardId: '', name: r.readerName, gender: r.gender, phone: r.phone, email: '', type: r.readerType, status: r.status }));
+        list = res.data.map(r => ({ id: r.readerId, name: r.readerName, gender: r.gender, phone: r.phone, type: r.readerType, status: r.status }));
         readerSearchResults = list;
     } else {
         list = (readerSearchResults || MockData.readers);
@@ -840,22 +891,32 @@ async function loadReaders(page = 1) {
     const items = list.slice(start, start + READER_PAGE_SIZE);
     tbody.innerHTML = items.length ? items.map(r => `
         <tr>
-            <td>${r.id}</td><td>${escapeHtml(r.cardId)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.gender)}</td>
-            <td>${escapeHtml(r.phone)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.type)}</td>
+            <td>${r.id}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.gender)}</td>
+            <td>${escapeHtml(r.phone)}</td><td>${escapeHtml(r.type)}</td>
             <td><span class="status ${r.status==='正常'?'ok':'bad'}">${escapeHtml(r.status)}</span></td>
             <td><div class="row-actions"><button class="small-btn secondary" onclick="editReader(${r.id})">编辑</button><button class="small-btn danger" onclick="deleteReader(${r.id})">删除</button></div></td>
-        </tr>`).join("") : `<tr><td colspan="9" class="empty">暂无读者数据</td></tr>`;
+        </tr>`).join("") : `<tr><td colspan="7" class="empty">暂无读者数据</td></tr>`;
     renderPagination("readerPagination", list.length, page, READER_PAGE_SIZE, "changeReaderPage");
 }
 
 function changeReaderPage(page) { loadReaders(page); }
 
-function searchReaders() { readerSearchResults = null; loadReaders(1); }
+async function searchReaders() {
+    const kw = document.getElementById("readerSearch")?.value.trim() || "";
+    readerSearchResults = null;
+    // 纯数字 → 按ID搜索
+    if (kw && /^\d+$/.test(kw)) {
+        const res = await readerApi.list("");
+        const list = (res.success && res.data) ? res.data.map(r => ({ id: r.readerId, name: r.readerName, gender: r.gender, phone: r.phone, type: r.readerType, status: r.status })) : [];
+        readerSearchResults = list.filter(r => String(r.id) === kw);
+    }
+    loadReaders(1);
+}
 
 function openReaderModal() {
     document.getElementById("readerModalTitle").textContent = "添加读者";
     document.getElementById("editReaderId").value = "";
-    ["readerCardId","readerName","readerGender","readerPhone","readerEmail","readerType","readerStatus"].forEach(id => {
+    ["readerName","readerGender","readerPhone","readerType","readerStatus"].forEach(id => {
         const el = document.getElementById(id); if (!el) return;
         if (id === "readerGender") el.value = "男"; else if (id === "readerType") el.value = "本科生"; else if (id === "readerStatus") el.value = "正常"; else el.value = "";
     });
@@ -883,7 +944,7 @@ async function editReader(id) {
     const mr = MockData.getReader(id); if (!mr) return;
     document.getElementById("readerModalTitle").textContent = "编辑读者";
     document.getElementById("editReaderId").value = mr.id;
-    document.getElementById("readerCardId").value = mr.cardId; document.getElementById("readerName").value = mr.name;
+    document.getElementById("readerName").value = mr.name;
     document.getElementById("readerGender").value = mr.gender||"男"; document.getElementById("readerPhone").value = mr.phone;
     document.getElementById("readerType").value = mr.type||"本科生"; document.getElementById("readerStatus").value = mr.status||"正常";
     document.getElementById("readerModal").style.display = "flex";
@@ -956,9 +1017,13 @@ async function loadAdminData() {
     const usersRes = await adminApi.listUsers();
     const roleBody = document.getElementById("roleListBody");
     if (roleBody && usersRes.success && usersRes.data) {
-        roleBody.innerHTML = usersRes.data.map((u, i) => `
-            <tr><td>${i+1}</td><td>${escapeHtml(u.username)}</td><td>${escapeHtml(u.role)}</td>
-            <td><div class="row-actions"><button class="small-btn secondary" onclick="editRole('${escapeHtml(u.username)}','${escapeHtml(u.role)}',${u.userId})">编辑</button><button class="small-btn danger" onclick="deleteRole(${u.userId})">删除</button></div></td></tr>`).join("");
+        roleBody.innerHTML = usersRes.data.map((u, i) => {
+            const isInactive = u.isActive !== null && u.isActive === false;
+            return `<tr style="${isInactive?'color:#999;background:#f9f9f9':''}"><td>${i+1}</td><td>${escapeHtml(u.username)}</td><td>${escapeHtml(u.role)}</td><td><span class="status ${isInactive?'bad':'ok'}">${isInactive?'已注销':'正常'}</span></td>
+            <td><div class="row-actions"><button class="small-btn secondary" onclick="editRole('${escapeHtml(u.username)}','${escapeHtml(u.role)}',${u.userId})">编辑</button>
+            ${isInactive ? `<button class="small-btn" onclick="activateRole(${u.userId})">恢复</button>` : `<button class="small-btn danger" onclick="deleteRole(${u.userId})">注销</button>`}
+            </div></td></tr>`;
+        }).join("");
     }
 
     // 分类
@@ -996,10 +1061,16 @@ async function saveRole() {
 }
 
 async function deleteRole(userId) {
-    if (!await showConfirm("确认删除？")) return;
-    const res = await adminApi.deleteUser(userId);
-    if (res.success) { loadAdminData(); showToast("已删除。"); }
-    else showToast("删除失败：" + res.message);
+    if (!await showConfirm("确认注销该用户？（可恢复）")) return;
+    const res = await authApi.deactivate(userId);
+    if (res.success) { loadAdminData(); showToast("用户已注销。"); }
+    else showToast("注销失败：" + res.message);
+}
+
+async function activateRole(userId) {
+    const res = await authApi.activate(userId);
+    if (res.success) { loadAdminData(); showToast("用户已重新激活。"); }
+    else showToast("操作失败：" + res.message);
 }
 
 async function deleteCategory(id) {
@@ -1140,13 +1211,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 e.preventDefault();
                 quickBorrow();
             });
-            // 填充读者datalist
-            const datalist = document.getElementById("readerCards");
-            if (datalist) {
-                datalist.innerHTML = MockData.readers.map(r =>
-                    `<option value="${escapeHtml(r.cardId)}">${escapeHtml(r.name)}</option>`
-                ).join("");
-            }
             break;
         case "readers.html":
             loadReaders(1);
@@ -1185,6 +1249,7 @@ window.renewBook = renewBook;
 window.notifyOverdue = notifyOverdue;
 window.payFine = payFine;
 window.searchReaders = searchReaders;
+window.searchBorrowRecords = searchBorrowRecords;
 window.openReaderModal = openReaderModal;
 window.closeReaderModal = closeReaderModal;
 window.saveReader = saveReader;
@@ -1196,6 +1261,7 @@ window.closeRoleModal = closeRoleModal;
 window.saveRole = saveRole;
 window.editRole = editRole;
 window.deleteRole = deleteRole;
+window.activateRole = activateRole;
 window.deleteCategory = deleteCategory;
 window.addCategory = addCategory;
 window.saveBorrowRules = saveBorrowRules;

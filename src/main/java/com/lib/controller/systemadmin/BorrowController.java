@@ -16,7 +16,7 @@ public class BorrowController {
     @GetMapping("/rules")
     public Result<List<Rule>> list() {
         return Result.success(ruleMapper.selectList(
-            new QueryWrapper<Rule>().groupBy("reader_type").orderByAsc("rule_id")));
+            new QueryWrapper<Rule>().orderByAsc("rule_id")));
     }
 
     @GetMapping("/rule/{type}")

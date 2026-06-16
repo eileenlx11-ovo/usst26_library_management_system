@@ -52,19 +52,18 @@
                     <div class="panel-heading">
                         <div>
                             <h2>快速借阅</h2>
-                            <p>录入借书证号和图书编号，自动按规则生成应还日期。</p>
+                            <p>输入读者ID和图书编号，自动按规则生成应还日期。</p>
                         </div>
                     </div>
                     <form class="form-grid" id="borrowForm">
-                        <label>借书证号
-                            <input id="borrowReaderCard" list="readerCards" placeholder="例如 R2026001" required>
+                        <label>读者ID
+                            <input id="borrowReaderId" type="number" min="1" placeholder="例如 1" required>
                         </label>
                         <label>图书编号
                             <input id="borrowBookId" type="number" min="1" placeholder="例如 1" required>
                         </label>
                         <button class="primary-btn" type="submit">办理借阅</button>
                     </form>
-                    <datalist id="readerCards"></datalist>
                 </section>
 
                 <section class="panel" id="ruleSummaryPanel">
@@ -89,6 +88,10 @@
                         <option value="已归还">已归还</option>
                         <option value="逾期">逾期</option>
                     </select>
+                </div>
+                <div class="toolbar">
+                    <input type="text" id="borrowIdSearch" class="search-box" placeholder="按借阅ID或读者ID搜索">
+                    <button class="primary-btn" onclick="searchBorrowRecords()">🔍 搜索</button>
                 </div>
                 <div class="table-wrap">
                     <table>
@@ -122,6 +125,7 @@
     <div id="profileModal" class="modal">
         <div class="modal-content">
             <h3>个人信息管理</h3>
+            <div id="profileReaderId" style="font-weight:700;color:#216e64;margin-bottom:6px;"></div>
             <input type="hidden" id="profileOldUsername">
             <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
             <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">

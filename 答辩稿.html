@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>答辩稿</title>
+<style>
+body{font-family:"Microsoft YaHei",sans-serif;font-size:15px;color:#222;line-height:2.4;max-width:860px;margin:40px auto;padding:0 30px}
+h1{text-align:center;font-size:24px;margin:30px 0 10px}
+h2{font-size:18px;border-bottom:2px solid #216e64;padding-bottom:4px;margin:30px 0 10px}
+p{margin:8px 0;text-indent:2em}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+th,td{border:1px solid #aaa;padding:5px 8px}
+th{background:#eef3ef}
+.cover{text-align:center;padding:50px 0}
+.cover h1{font-size:26px;border:none}
+.page-break{page-break-before:always}
+</style>
+</head>
+<body>
+
+<div class="cover">
+<h1>图书馆管理系统答辩陈述</h1>
+<p style="font-size:16px">数据库原理课程大作业</p>
+<p>答辩人：前端负责人B · 2026年6月</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>工作范围</h2>
+
+<p>我在小组里担任前端负责人，任务是整合两个已有前端版本，实现角色权限隔离，并打通所有模块与数据库的连接。因为后端进度滞后，我也顺带把缺失的 Controller、Service、Mapper 全写了——最终从借阅模块 4 个可用接口扩展为 12 个 Controller 共 31 个接口，前端 7 个页面全功能直连 MySQL。</p>
+
+<h2>关键架构决策：多页面还是单页面</h2>
+
+<p>项目启动时我面前有两套前端。A 是单页面 SPA，一个 HTML 里用 JS 切五个视图，功能模块确实丰富——仪表盘指标卡片根据角色分别算数据、待办列表自动聚合逾期催还和库存告警、罚款管理表、逾期催还名单、横向柱状图。B 是我最初写的多页面版本，六个独立 HTML 文件，结构清晰但数据全用 JS 数组硬编码，也没有角色权限区分。</p>
+
+<p>我选了保留多页面架构。理由很实在：系统有三种角色——读者只能看三页，图书管理员四页，系统管理员六页。多页面天然支持按 URL 做拦截——读者访问 readers.html 直接跳首页提示无权——不需要在单页面的路由层堆一堆 if-else。而且多页面把代码按功能拆成独立文件，我们小组几个人各改各的互不冲突。然后我把 A 里最好的东西拿出来：深绿侧边栏的 CSS 变量体系、四个指标卡片的计算逻辑、待办列表的生成函数、柱状图渲染、罚款记录和快速借阅表单。这些纯逻辑逐个植入到我的 HTML 和 script.js 里。我没有做差异合并——两个库的 DOM 结构和 JS 变量域完全不同，逐文件重写虽然累，但最终代码一致性比拼凑好太多。</p>
+
+<h2>API 优先 + Mock 回退</h2>
+
+<p>这是我整个项目最核心的设计。初期后端只有借阅模块 4 个接口能用，其余 ReaderController、系统管理 Controller 全是空壳类只有注释。我不能等，所以设计了双层数据策略。新建 js/api.js，把所有 fetch 封装成统一的 apiGet、apiPost、apiPostJson、apiPut、apiDel 五个方法，自动解析 JSON 返回值，兼容 code=200 和 code=1 两种成功码。每个模块定义了一个 API 对象——bookApi、borrowApi、readerApi、reportApi、categoryApi、ruleApi、adminApi、authApi、inviteApi——每个函数要么调真实 fetch，要么在接口不可用时走 useMock() 回退本地数据。</p>
+
+<p>这层策略让前端全程独立于后端进度——任何时候都能打开浏览器演示全功能。更重要的是，每个 API 函数名和参数格式成了接口契约。后来我补 27 个后端接口时，就是按照 api.js 里已经定好的签名来实现的，前端一个字都没改。前后端之间的解耦完全靠这层 API 层撑起来的。</p>
+
+<h2>补后端接口时踩的三个坑</h2>
+
+<p>合并后端 A（图书模块）和后端 B（借阅模块）的时候，A 用 PageHelper 分页，B 用 MyBatis-Plus，两个框架各自带了自己的 MyBatis 版本。PageHelper 引入的 mybatis 3.5.9 和 MP 3.5.5 需要的 3.5.15 不兼容，Application 直接起不来，堆了一堆 NoSuchMethodError。我全部切到 MP，把 BookMapper.selectByCondition 改成接受 Page 参数，BookServiceimpl 里的 PageHelper.startPage() 改成 new Page<>(num, size)，再加一个 MybatisPlusConfig 注册分页拦截器。</p>
+
+<p>数据库连接配的库名是"借阅系统数据库"六个汉字，JDBC URL 里被编码成乱码，接口全是 500 但启动日志不报错。我 curl、URLEncode 都试过，最后直接换了英文库名 library_db，DataGrip 重新导一遍数据，立刻通了。教训是别用中文做数据库名。</p>
+
+<p>借书接口 selectOne() 报 Expected one result but found 25，一查 Rule 表每种读者类型数据被反复插了 25 次——建表脚本和数据插入脚本各跑了一次，触发器又触发了一次。Fine 表也有 UNIQUE 冲突——归还时 Service 层插入罚款，数据库 trg_auto_create_fine 触发器又被触发再插一次同一 borrow_id。我直接在 MySQL 里删了重复行和那个触发器，因为 Java 代码已经处理罚款逻辑了。</p>
+
+<h2>三层权限防护</h2>
+
+<p>原前端完全没权限区分。我设计了三层：路由层 PAGE_ROLE_MAP 定义每页允许谁访问，无权直接跳转首页。侧边栏 renderSidebar() 根据 session 动态渲染，读者看三行导航、管理员四行、系统管理员六行。页面内按钮按角色差异化——books.html 里读者看"借阅"按钮，管理员看"编辑""删除"。三层中任何一层失效，其余两层照常起作用。</p>
+
+<h2>邀请码安全</h2>
+
+<p>这不是原始需求，但我认为三角色系统必须有注册入口控制。最初偷懒硬编码了"LIB2024"在源码里，F12 就能看。意识到问题后我完全重构：管理员在 admin 页面动态生成 8 位随机码（排除 I/O/0/1），指定目标角色和使用次数上限，支持随时吊销。注册时校验走后端接口，查 InviteCode 表的状态和过期时间。源码中不存在任何预设邀请码。</p>
+
+<h2>成果</h2>
+
+<table>
+<tr><th>层面</th><th>产出</th></tr>
+<tr><td>前端</td><td>7 个页面 + 样式 430 行 + 业务逻辑约 1200 行 + API 层 31 端点</td></tr>
+<tr><td>后端</td><td>12 个 Controller、52 个 Java 文件（含 Mapper、Service、Entity、DTO、VO、Config）</td></tr>
+<tr><td>数据库</td><td>10 张表 + 118 本书 + 151 条借阅记录 + 3 触发器 + 5 视图 + 5 存储过程</td></tr>
+<tr><td>权限</td><td>三级角色三层防护，读者/图书管理员/系统管理员各有差异化界面</td></tr>
+</table>
+
+<p>整个项目最大的收获是：API 优先 + Mock 回退这一层设计，让前端始终独立于后端进度，也为我自己快速补齐接口提供了明确的可执行路径。以上就是我的答辩陈述，谢谢各位老师。</p>
+
+</body>
+</html>

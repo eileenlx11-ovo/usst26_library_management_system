@@ -40,6 +40,6 @@ public class ToolServiceimpl implements ToolService {
 
     @Override
     public List<Map<String,Object>> overdueList() {
-        return query("SELECT r.reader_name AS readerName,r.phone,b.book_name AS bookName,br.due_date AS dueDate,DATEDIFF(CURDATE(),br.due_date) AS overdueDays,ru.fine_per_day*DATEDIFF(CURDATE(),br.due_date) AS fine FROM borrowrecord br JOIN reader r ON br.reader_id=r.reader_id JOIN book b ON br.book_id=b.book_id JOIN rule ru ON br.rule_id=ru.rule_id WHERE br.due_date<CURDATE() AND br.borrow_status!='已归还'");
+        return query("SELECT r.reader_id AS `readerId`,r.reader_name AS readerName,r.phone,b.book_name AS bookName,f.fine_amount AS fine,br.due_date AS dueDate,f.create_date AS createDate,DATEDIFF(f.create_date,br.due_date) AS overdueDays FROM fine f JOIN borrowrecord br ON f.borrow_id=br.borrow_id JOIN reader r ON br.reader_id=r.reader_id JOIN book b ON br.book_id=b.book_id WHERE f.is_paid=0 AND br.return_date IS NULL ORDER BY f.create_date DESC");
     }
 }

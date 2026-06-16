@@ -95,7 +95,14 @@ const fineApi = {
 // ===================== 登录/注册 ✅ =====================
 const authApi = {
     async login(username, password, role) { return apiPost('/auth/login', { username, password, role }); },
-    async register(username, password, role, inviteCode) { return apiPost('/auth/register', { username, password, role, inviteCode }); }
+    async register(username, password, role, inviteCode, readerName, readerGender, readerPhone, readerType) {
+        return apiPost('/auth/register', {
+            username, password, role, inviteCode: inviteCode || '',
+            readerName: readerName || '', readerGender: readerGender || '', readerPhone: readerPhone || '', readerType: readerType || ''
+        });
+    },
+    async deactivate(userId) { return apiPost('/auth/deactivate/' + userId); },
+    async activate(userId) { return apiPost('/auth/activate/' + userId); }
 };
 
 // ===================== 邀请码 ✅ =====================

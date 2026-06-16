@@ -52,13 +52,13 @@
                     <button class="primary-btn" onclick="openReaderModal()">➕ 添加读者</button>
                 </div>
                 <div class="toolbar">
-                    <input type="text" id="readerSearch" class="search-box" placeholder="按姓名 / 借书证号搜索">
+                    <input type="text" id="readerSearch" class="search-box" placeholder="按姓名或读者ID搜索">
                     <button class="primary-btn" onclick="searchReaders()">🔍 搜索</button>
                 </div>
                 <div class="table-wrap">
                     <table>
                         <thead>
-                            <tr><th>ID</th><th>借书证号</th><th>姓名</th><th>性别</th><th>电话</th><th>邮箱</th><th>类型</th><th>状态</th><th>操作</th></tr>
+                            <tr><th>ID</th><th>姓名</th><th>性别</th><th>电话</th><th>类型</th><th>状态</th><th>操作</th></tr>
                         </thead>
                         <tbody id="readerListBody"></tbody>
                     </table>
@@ -74,15 +74,13 @@
             <h3 id="readerModalTitle">添加读者</h3>
             <input type="hidden" id="editReaderId">
             <div class="form-grid">
-                <label>借书证号<input type="text" id="readerCardId" required></label>
                 <label>姓名<input type="text" id="readerName" required></label>
                 <label>性别
                     <select id="readerGender"><option>男</option><option>女</option></select>
                 </label>
                 <label>电话<input type="text" id="readerPhone"></label>
-                <label>邮箱<input type="text" id="readerEmail"></label>
                 <label>读者类型
-                    <select id="readerType"><option>学生</option><option>教师</option></select>
+                    <select id="readerType"><option>本科生</option><option>研究生</option><option>教师</option><option>校外人员</option></select>
                 </label>
                 <label>状态
                     <select id="readerStatus"><option>正常</option><option>停用</option></select>
@@ -99,6 +97,7 @@
     <div id="profileModal" class="modal">
         <div class="modal-content">
             <h3>个人信息管理</h3>
+            <div id="profileReaderId" style="font-weight:700;color:#216e64;margin-bottom:6px;"></div>
             <input type="hidden" id="profileOldUsername">
             <label>用户名</label><input type="text" id="profileUsername" placeholder="用户名">
             <label>新密码</label><input type="password" id="profilePassword" placeholder="不修改则留空">
