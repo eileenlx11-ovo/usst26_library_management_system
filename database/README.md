@@ -309,6 +309,74 @@ InviteCode(code_id, code, role, created_by, used_by, is_used, create_time, expir
 | `sp_register_user` | 用户注册 | username, password, invite_code, reader_name, gender, phone, reader_type | SELECT结果集 | 事务 + 邀请码验证 + 自动创建Reader记录 | 04 |
 | `sp_borrow_book_safe` | 借书（死锁安全版） | reader_id, book_id, rule_id | p_result | 封装sp_borrow_book，捕获错误码1213自动重试最多3次 | 07 |
 
+### 存储过程详细说明
+
+#### sp_register_user — 用户注册（04_用户注册存储过程.sql）
+
+用事务保证注册流程的原子性，流程如下：
+
+```
+验证邀请码（必须存在、未使用、未过期）
+  → 检查用户名唯一
+    → 如果是读者角色就先创建 Reader 记录
+      → 插入 User 记录
+        → 标记邀请码已使用
+          → COMMIT
+```
+
+任何一步出错都会触发 `EXIT HANDLER` 自动 ROLLBACK，不会出现半成品数据。
+
+**邀请码机制的设计意义**：系统不是开放注册的，必须由管理员事先生成邀请码并发放。邀请码本身绑定了角色，用户拿着读者码只能注册成读者，不能自己提权成管理员，从源头避免了越权问题。
+
+#### sp_borrow_book — 借书（07_并发控制.sql）
+
+```
+检查读者状态是否正常
+  → SELECT ... FOR UPDATE 锁定图书行
+    → 检查库存是否大于 0
+      → 检查是否已达借阅上限
+        → INSERT 借阅记录
+          → 触发器自动扣库存
+            → COMMIT
+```
+
+#### sp_return_book — 还书（07_并发控制.sql）
+
+```
+FOR UPDATE 锁定借阅记录（防止重复还书）
+  → 计算逾期天数
+    → UPDATE 设置 return_date 和 borrow_status
+      → BEFORE 触发器自动恢复库存
+        → AFTER 触发器自动生成罚款（如逾期）
+          → COMMIT
+```
+
+#### sp_renew_book — 续借（07_并发控制.sql）
+
+```
+FOR UPDATE 锁定借阅记录（防止并发续借）
+  → 检查状态必须为"借阅中"且未续借过
+    → 从 Rule 表读取续借天数
+      → 延长 due_date
+        → 标记 is_renewed = TRUE
+          → COMMIT
+```
+
+限制：每条借阅记录只能续借一次。
+
+#### sp_pay_fine — 缴费（07_并发控制.sql）
+
+```
+FOR UPDATE 锁定罚款记录（防止重复缴费）
+  → 检查是否已缴纳
+    → 设置 is_paid = TRUE，记录 pay_date
+      → COMMIT
+```
+
+#### sp_borrow_book_safe — 死锁安全版借书（07_并发控制.sql）
+
+封装 `sp_borrow_book`，专门捕获 MySQL 错误码 1213（死锁），自动重试最多 3 次。大多数情况下用户无感知。
+
 ### 存储过程调用示例
 
 ```sql
