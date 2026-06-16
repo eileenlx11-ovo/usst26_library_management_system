@@ -31,21 +31,7 @@ public class AuthController {
                            @RequestParam(defaultValue = "") String role) {
         User user = userMapper.selectByUsername(username);
         if (user == null) return Result.error("用户名或密码错误");
-        boolean pwOk = false;
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            String stored = user.getPassword();
-            // 1. 明文直接匹配（旧数据）
-            if (stored.equals(password)) pwOk = true;
-            // 2. SHA256(password) 无盐
-            if (!pwOk && stored.length() == 64 && stored.equals(bytesToHex(md.digest(password.getBytes())))) pwOk = true;
-            // 3. SHA256(salt + password + salt) 带盐（06_系统安全.sql 加密）
-            if (!pwOk && stored.length() == 64 && user.getSalt() != null && !user.getSalt().isEmpty()) {
-                String salted = user.getSalt() + password + user.getSalt();
-                if (stored.equals(bytesToHex(md.digest(salted.getBytes())))) pwOk = true;
-            }
-        } catch (Exception ignored) {}
-        if (!pwOk) return Result.error("用户名或密码错误");
+        if (!password.equals(user.getPassword())) return Result.error("用户名或密码错误");
         if (role != null && !role.isEmpty() && !user.getRole().equals(role)) return Result.error("角色不匹配");
         if (user.getIsActive() != null && !user.getIsActive()) return Result.error("账号已被注销");
         user.setLastLogin(LocalDateTime.now()); userMapper.updateById(user);
