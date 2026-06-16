@@ -62,7 +62,7 @@ source sql/06_系统安全.sql;
 source sql/07_并发控制.sql;
 
 -- 6.（可选）备份库同步触发器
---    需先创建备份库：CREATE DATABASE `借阅系统数据库_backup` DEFAULT CHARSET utf8mb4;
+--    需先创建备份库：CREATE DATABASE `library_db_backup` DEFAULT CHARSET utf8mb4;
 --    并在备份库中执行 01 + 02 的建表语句
 source sql/08_同步更新backup触发器.sql;
 
@@ -112,7 +112,7 @@ source query/05_展示查询.sql;
 
 - 10张表 × 3操作（INSERT/UPDATE/DELETE）= **30个触发器**
 - 命名：`trg_backup_<表名>_<insert|update|delete>`
-- 实时同步主库变更到 `借阅系统数据库_backup`
+- 实时同步主库变更到 `library_db_backup`
 
 ---
 
@@ -176,7 +176,7 @@ source query/05_展示查询.sql;
 ## 💾 备份同步（08）
 
 - 通过触发器实现主库到备份库的**实时同步**
-- 备份库名：`借阅系统数据库_backup`
+- 备份库名：`library_db_backup`
 - 覆盖所有10张表的 INSERT / UPDATE / DELETE 操作
 - 使用前需先创建备份库并建立相同表结构
 

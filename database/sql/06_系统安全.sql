@@ -5,7 +5,7 @@
 -- 前置依赖：先执行 01 ~ 05
 -- =============================================
 
-USE 借阅系统数据库;
+USE library_db;
 
 -- =============================================
 -- 一、密码加密改造（SHA2 + Salt）
@@ -220,35 +220,35 @@ CREATE USER IF NOT EXISTS 'lib_staff'@'localhost' IDENTIFIED BY 'Staff@2026secur
 CREATE USER IF NOT EXISTS 'lib_reader'@'localhost' IDENTIFIED BY 'Reader@2026secure';
 
 -- 3.2 系统管理员：拥有该数据库的全部权限
-GRANT ALL PRIVILEGES ON 借阅系统数据库.* TO 'lib_admin'@'localhost';
+GRANT ALL PRIVILEGES ON library_db.* TO 'lib_admin'@'localhost';
 
 -- 3.3 图书管理员：可操作图书和借阅业务，不能管理用户和邀请码
-GRANT SELECT, INSERT, UPDATE, DELETE ON 借阅系统数据库.Book TO 'lib_staff'@'localhost';
-GRANT SELECT, INSERT, UPDATE, DELETE ON 借阅系统数据库.Author TO 'lib_staff'@'localhost';
-GRANT SELECT, INSERT, UPDATE, DELETE ON 借阅系统数据库.Publisher TO 'lib_staff'@'localhost';
-GRANT SELECT, INSERT, UPDATE, DELETE ON 借阅系统数据库.Category TO 'lib_staff'@'localhost';
-GRANT SELECT, INSERT, UPDATE ON 借阅系统数据库.BorrowRecord TO 'lib_staff'@'localhost';
-GRANT SELECT, UPDATE ON 借阅系统数据库.Fine TO 'lib_staff'@'localhost';
-GRANT SELECT ON 借阅系统数据库.Reader TO 'lib_staff'@'localhost';
-GRANT SELECT ON 借阅系统数据库.Rule TO 'lib_staff'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON library_db.Book TO 'lib_staff'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON library_db.Author TO 'lib_staff'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON library_db.Publisher TO 'lib_staff'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON library_db.Category TO 'lib_staff'@'localhost';
+GRANT SELECT, INSERT, UPDATE ON library_db.BorrowRecord TO 'lib_staff'@'localhost';
+GRANT SELECT, UPDATE ON library_db.Fine TO 'lib_staff'@'localhost';
+GRANT SELECT ON library_db.Reader TO 'lib_staff'@'localhost';
+GRANT SELECT ON library_db.Rule TO 'lib_staff'@'localhost';
 -- 允许调用业务存储过程
-GRANT EXECUTE ON PROCEDURE 借阅系统数据库.sp_borrow_book TO 'lib_staff'@'localhost';
-GRANT EXECUTE ON PROCEDURE 借阅系统数据库.sp_return_book TO 'lib_staff'@'localhost';
-GRANT EXECUTE ON PROCEDURE 借阅系统数据库.sp_renew_book TO 'lib_staff'@'localhost';
-GRANT EXECUTE ON PROCEDURE 借阅系统数据库.sp_pay_fine TO 'lib_staff'@'localhost';
+GRANT EXECUTE ON PROCEDURE library_db.sp_borrow_book TO 'lib_staff'@'localhost';
+GRANT EXECUTE ON PROCEDURE library_db.sp_return_book TO 'lib_staff'@'localhost';
+GRANT EXECUTE ON PROCEDURE library_db.sp_renew_book TO 'lib_staff'@'localhost';
+GRANT EXECUTE ON PROCEDURE library_db.sp_pay_fine TO 'lib_staff'@'localhost';
 
 -- 3.4 读者：只能查看图书信息、查看自身借阅、调用借书/续借
-GRANT SELECT ON 借阅系统数据库.Book TO 'lib_reader'@'localhost';
-GRANT SELECT ON 借阅系统数据库.Author TO 'lib_reader'@'localhost';
-GRANT SELECT ON 借阅系统数据库.Publisher TO 'lib_reader'@'localhost';
-GRANT SELECT ON 借阅系统数据库.Category TO 'lib_reader'@'localhost';
-GRANT SELECT ON 借阅系统数据库.BorrowRecord TO 'lib_reader'@'localhost';
-GRANT SELECT ON 借阅系统数据库.Fine TO 'lib_reader'@'localhost';
-GRANT SELECT ON 借阅系统数据库.Rule TO 'lib_reader'@'localhost';
+GRANT SELECT ON library_db.Book TO 'lib_reader'@'localhost';
+GRANT SELECT ON library_db.Author TO 'lib_reader'@'localhost';
+GRANT SELECT ON library_db.Publisher TO 'lib_reader'@'localhost';
+GRANT SELECT ON library_db.Category TO 'lib_reader'@'localhost';
+GRANT SELECT ON library_db.BorrowRecord TO 'lib_reader'@'localhost';
+GRANT SELECT ON library_db.Fine TO 'lib_reader'@'localhost';
+GRANT SELECT ON library_db.Rule TO 'lib_reader'@'localhost';
 -- 允许调用有限的存储过程
-GRANT EXECUTE ON PROCEDURE 借阅系统数据库.sp_borrow_book TO 'lib_reader'@'localhost';
-GRANT EXECUTE ON PROCEDURE 借阅系统数据库.sp_renew_book TO 'lib_reader'@'localhost';
-GRANT EXECUTE ON PROCEDURE 借阅系统数据库.sp_login TO 'lib_reader'@'localhost';
+GRANT EXECUTE ON PROCEDURE library_db.sp_borrow_book TO 'lib_reader'@'localhost';
+GRANT EXECUTE ON PROCEDURE library_db.sp_renew_book TO 'lib_reader'@'localhost';
+GRANT EXECUTE ON PROCEDURE library_db.sp_login TO 'lib_reader'@'localhost';
 
 -- 3.5 刷新权限
 FLUSH PRIVILEGES;

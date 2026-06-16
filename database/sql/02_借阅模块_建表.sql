@@ -4,8 +4,8 @@
 -- 前置依赖：先执行 01_图书模块_建表.sql
 -- =============================================
 
-CREATE DATABASE IF NOT EXISTS 借阅系统数据库 DEFAULT CHARSET utf8mb4;
-USE 借阅系统数据库;
+CREATE DATABASE IF NOT EXISTS library_db DEFAULT CHARSET utf8mb4;
+USE library_db;
 
 -- =============================================
 -- 1. 读者表 Reader
